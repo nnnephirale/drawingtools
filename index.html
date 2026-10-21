@@ -1,0 +1,1990 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Slip &amp; Metal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+/* Layout: one artboard centred in a stage, quiet frosted chrome floating around it (creative-tool-ui kit). */
+:root{
+  --page-a:#fcfcfb; --page-b:#f2f1ee;
+  --ink:#1c1b19; --ink-2:#6b6862; --ink-3:#a3a09a;
+  --panel:rgba(252,251,249,0.93);
+  --line:rgba(0,0,0,0.055); --line-2:rgba(0,0,0,0.10);
+  --fillbg:#f1efeb; --fillfg:#e2dfd8;
+  --white:#ffffff;
+  --danger:#c0787c;
+  --toast:rgba(28,27,25,.92);
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --r:20px; --rail:306px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+body{
+  background:linear-gradient(180deg,var(--page-a),var(--page-b));color:var(--ink);
+  font-family:var(--mono);font-weight:300;font-size:12px;-webkit-font-smoothing:antialiased;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+}
+button{font-family:inherit;touch-action:manipulation}
+
+/* ── stage + artboard ─────────────────────────────── */
+.stage{
+  position:fixed;top:calc(64px + var(--safe-t));left:calc(24px + var(--safe-l));right:calc(24px + var(--safe-r));bottom:calc(96px + var(--safe-b));
+  display:grid;place-items:center;transition:right .55s var(--ease),bottom .55s var(--ease);touch-action:none;
+}
+@media (min-width:780px){ body:has(.panel:not([hidden-state])) .stage{right:calc(var(--rail) + 42px + var(--safe-r))} }
+.board{
+  position:relative;border-radius:4px;transform-origin:50% 50%;will-change:transform;touch-action:none;
+  box-shadow:0 1px 2px rgba(0,0,0,.04),0 30px 70px -24px rgba(0,0,0,.28);
+  background-color:var(--white);
+}
+.board.clear{
+  background-image:linear-gradient(45deg,var(--fillbg) 25%,transparent 25%,transparent 75%,var(--fillbg) 75%),
+                   linear-gradient(45deg,var(--fillbg) 25%,transparent 25%,transparent 75%,var(--fillbg) 75%);
+  background-size:16px 16px;background-position:0 0,8px 8px;
+}
+.board.easing{transition:transform .45s var(--ease)}
+.board canvas{display:block;width:100%;height:100%;border-radius:inherit;touch-action:none}
+.board.nocursor{cursor:none}
+.board.grab{cursor:grab}
+.guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.guides line{stroke:rgba(0,0,0,.16);stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:2 6}
+.empty{
+  position:absolute;left:0;right:0;bottom:22px;text-align:center;color:var(--ink-3);pointer-events:none;
+  font-size:11px;letter-spacing:.06em;transition:opacity .6s var(--ease);
+}
+.empty.off{opacity:0}
+.ring{
+  position:fixed;left:0;top:0;border-radius:50%;pointer-events:none;z-index:4;opacity:0;
+  border:1px solid rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.55),inset 0 0 0 1px rgba(255,255,255,.35);
+  transition:opacity .2s var(--ease);
+}
+.ring.on{opacity:1}
+.ring.erase{border-style:dashed}
+
+/* ── chrome ─────────────────────────────────────── */
+.chrome{position:fixed;inset:0;pointer-events:none;z-index:5}
+.chrome > *{pointer-events:auto}
+.brand{
+  position:absolute;top:calc(16px + var(--safe-t));left:calc(18px + var(--safe-l));
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);
+}
+.stat{
+  position:absolute;top:calc(34px + var(--safe-t));left:calc(18px + var(--safe-l));
+  font-size:10px;letter-spacing:.06em;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.iconbtn{
+  appearance:none;border:1px solid var(--line);background:var(--panel);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  color:var(--ink-2);width:38px;height:38px;border-radius:13px;
+  display:grid;place-items:center;cursor:pointer;padding:0;
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 6px 18px -8px rgba(0,0,0,.10);
+  transition:transform .35s var(--ease),color .3s var(--ease),box-shadow .35s var(--ease);
+}
+.iconbtn:hover{color:var(--ink);box-shadow:0 2px 4px rgba(0,0,0,.04),0 12px 26px -10px rgba(0,0,0,.16)}
+.iconbtn:active{transform:scale(.94)}
+svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.topright{position:absolute;top:calc(12px + var(--safe-t));right:calc(14px + var(--safe-r));display:flex;gap:8px;transition:right .55s var(--ease)}
+@media (min-width:780px){ body:has(.panel:not([hidden-state])) .topright{right:calc(var(--rail) + 28px + var(--safe-r))} }
+
+.zoombar{
+  position:relative;height:38px;border-radius:13px;padding:0 3px;display:flex;align-items:center;gap:1px;
+  border:1px solid var(--line);background:var(--panel);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:var(--ink-2);
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 8px 24px -12px rgba(0,0,0,.18);
+}
+.zoombar button{
+  appearance:none;border:0;background:transparent;cursor:pointer;color:inherit;height:30px;border-radius:10px;
+  font:300 11px/1 var(--mono);letter-spacing:.06em;font-variant-numeric:tabular-nums;
+  transition:color .3s var(--ease),background .3s var(--ease);
+}
+.zoombar button:hover{color:var(--ink);background:var(--fillbg)}
+.zoombar .zstep{width:32px;font-size:14px}
+.zoombar .zpct{min-width:58px;padding:0 8px}
+.zoombar .zfit{padding:0 10px;letter-spacing:.12em;text-transform:uppercase;font-size:10px}
+.zoombar .zfit[aria-pressed="true"]{color:var(--ink);background:var(--fillbg)}
+.zsep{width:1px;height:14px;background:var(--line-2)}
+.zmenu{
+  position:absolute;right:0;top:calc(100% + 8px);min-width:120px;padding:5px;border-radius:14px;
+  border:1px solid var(--line);background:var(--panel);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 16px 40px -16px rgba(0,0,0,.24);
+  display:none;flex-direction:column;gap:1px;z-index:2;
+}
+.zmenu.on{display:flex}
+.zmenu button{text-align:left;padding:0 10px;width:100%}
+.zmenu button[aria-current="true"]{color:var(--ink);background:var(--fillbg)}
+@media (max-width:779px){ .zoombar{position:absolute;right:0;top:calc(100% + 8px)} .stage{top:calc(110px + var(--safe-t))} }
+
+/* ── tool pill ─────────────────────────────────── */
+.pill{
+  position:absolute;left:50%;bottom:calc(26px + var(--safe-b));transform:translateX(-50%);
+  height:52px;border-radius:26px;padding:0 6px;
+  border:1px solid var(--line);background:var(--panel);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  display:flex;align-items:center;gap:2px;color:var(--ink-2);white-space:nowrap;
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 30px -12px rgba(0,0,0,.20);
+  transition:left .55s var(--ease),transform .4s var(--ease),opacity .4s var(--ease),box-shadow .4s var(--ease);
+}
+.pill:hover{box-shadow:0 2px 6px rgba(0,0,0,.04),0 18px 40px -14px rgba(0,0,0,.26)}
+@media (min-width:780px){ body:has(.panel:not([hidden-state])) .pill{left:calc((100% - var(--rail) - 28px) / 2)} }
+.tools{position:relative;display:flex;gap:2px}
+.tools .thumb{
+  position:absolute;left:0;top:0;height:40px;width:0;border-radius:20px;background:var(--fillbg);
+  transition:transform .45s var(--ease),width .45s var(--ease);
+}
+.tools button,.pi{
+  appearance:none;border:0;background:transparent;cursor:pointer;color:inherit;position:relative;
+  height:40px;border-radius:20px;display:flex;align-items:center;gap:8px;
+  font:300 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  transition:color .3s var(--ease),background .3s var(--ease),transform .3s var(--ease),opacity .3s var(--ease);
+}
+.tools button{padding:0 14px 0 11px}
+.tools button:hover,.tools button[aria-pressed="true"]{color:var(--ink)}
+.tools button:active,.pi:active{transform:scale(.96)}
+.pi{width:40px;justify-content:center;padding:0}
+.pi:hover{color:var(--ink);background:var(--fillbg)}
+.pi:disabled{opacity:.35;pointer-events:none}
+.pi svg.i{width:16px;height:16px}
+.psep{width:1px;height:18px;background:var(--line-2);margin:0 4px}
+.ball{width:16px;height:16px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.12)}
+.tools svg.i{width:16px;height:16px}
+
+/* ── panel ─────────────────────────────────────── */
+.panel{
+  position:absolute;background:var(--panel);
+  backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
+  border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 24px 60px -20px rgba(0,0,0,.22);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:transform .55s var(--ease),opacity .35s var(--ease);
+}
+@media (min-width:780px){
+  .panel{top:calc(14px + var(--safe-t));right:calc(14px + var(--safe-r));bottom:calc(14px + var(--safe-b));width:var(--rail)}
+  .panel[hidden-state]{transform:translateX(calc(100% + 20px));opacity:0;pointer-events:none}
+}
+@media (max-width:779px){
+  .panel{left:10px;right:10px;bottom:calc(10px + var(--safe-b));height:min(58vh,430px);border-radius:22px}
+  .panel[hidden-state]{transform:translateY(calc(100% + 24px));opacity:0;pointer-events:none}
+  body:has(.panel:not([hidden-state])) .pill{opacity:0;pointer-events:none;transform:translateX(-50%) translateY(12px)}
+  body:has(.panel:not([hidden-state])) .stage{bottom:calc(min(58vh,430px) + 24px + var(--safe-b))}
+  .tools button{padding:0 10px 0 9px;letter-spacing:.08em}
+}
+.phead{display:flex;align-items:center;gap:2px;padding:12px 12px 0}
+.tabs{display:flex;gap:2px;flex:1}
+.tab{
+  appearance:none;border:0;background:transparent;cursor:pointer;
+  font:300 11px/1 var(--mono);letter-spacing:.06em;
+  color:var(--ink-3);padding:7px 9px;border-radius:9px;
+  transition:color .3s var(--ease),background .3s var(--ease);
+}
+.tab:hover{color:var(--ink-2)}
+.tab[aria-selected="true"]{color:var(--ink);background:var(--fillbg)}
+.xbtn{appearance:none;border:0;background:transparent;color:var(--ink-3);width:30px;height:30px;border-radius:9px;display:grid;place-items:center;cursor:pointer;transition:color .3s var(--ease),background .3s var(--ease)}
+.xbtn:hover{color:var(--ink);background:var(--fillbg)}
+.xbtn svg.i{width:14px;height:14px}
+.pbody{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.pane{display:none;flex-direction:column;gap:7px}
+.pane.on{display:flex}
+
+/* fill-bar slider: the whole row is the slider */
+.ctrl{
+  position:relative;height:36px;border-radius:11px;background:var(--fillbg);
+  overflow:hidden;display:flex;align-items:center;padding:0 11px;cursor:ew-resize;
+  user-select:none;-webkit-user-select:none;flex:none;touch-action:pan-y;
+}
+.ctrl::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:var(--fill,0%);
+  background:var(--fillfg);transition:width .06s linear;
+}
+.ctrl > span{position:relative;color:var(--ink-2);letter-spacing:.02em;transition:color .3s var(--ease)}
+.ctrl > b{position:relative;margin-left:auto;font-weight:400;color:var(--ink);font-variant-numeric:tabular-nums}
+.ctrl:hover > span,.ctrl.on > span{color:var(--ink)}
+.ctrl input[type=range]{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
+.ctrl:focus-within{box-shadow:inset 0 0 0 1px var(--ink-3)}
+
+.row{display:flex;align-items:center;gap:10px;min-height:32px;padding:0 11px;color:var(--ink-2);flex:none}
+.row .lab{width:78px;letter-spacing:.02em}
+.row input[type=text]{
+  border:0;border-bottom:1px solid var(--line-2);background:transparent;border-radius:0;
+  font:400 12px/1 var(--mono);color:var(--ink-3);padding:3px 2px;outline:none;
+  transition:border-color .3s var(--ease),color .3s var(--ease);-webkit-user-select:text;user-select:text;
+}
+.row input[type=text]:focus{border-color:var(--ink-3);color:var(--ink)}
+.row.tog{cursor:pointer;gap:0}
+.row.tog label{cursor:pointer;letter-spacing:.02em}
+.row input[type=checkbox]{
+  appearance:none;-webkit-appearance:none;width:15px;height:15px;border:1px solid var(--line-2);border-radius:5px;
+  background:var(--white);cursor:pointer;position:relative;margin:0 9px 0 0;flex:none;
+  transition:background .25s var(--ease),border-color .25s var(--ease);
+}
+.row input[type=checkbox]:checked{background:var(--ink-2);border-color:var(--ink-2)}
+.row input[type=checkbox]:checked::after{
+  content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;
+  border:solid var(--white);border-width:0 1.4px 1.4px 0;transform:rotate(42deg);
+}
+.swatch{position:relative;width:19px;height:19px;border-radius:6px;border:1px solid var(--line-2);overflow:hidden;cursor:pointer;flex:none}
+.swatch input{position:absolute;inset:-10px;width:40px;height:40px;opacity:0;cursor:pointer;border:0;padding:0}
+.hex{width:74px}
+
+.sec{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding:12px 11px 3px}
+.pane > .sec:first-child{padding-top:2px}
+.hint{color:var(--ink-3);padding:2px 11px;line-height:1.75;font-size:11px}
+.hint kbd{font:400 10px/1 var(--mono);color:var(--ink-2);padding:2px 4px;border-radius:4px;background:var(--fillbg)}
+
+/* segmented control with a gliding thumb */
+.seg{position:relative;display:flex;background:var(--fillbg);border-radius:11px;padding:3px;height:36px;flex:none}
+.seg .thumb{
+  position:absolute;top:3px;bottom:3px;left:0;width:0;border-radius:8px;background:var(--white);
+  box-shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px -2px rgba(0,0,0,.08);
+  transition:transform .45s var(--ease),width .45s var(--ease);
+}
+.seg button{
+  flex:1;position:relative;border:0;background:transparent;cursor:pointer;border-radius:8px;
+  font:300 11px/1 var(--mono);letter-spacing:.04em;color:var(--ink-3);padding:0 4px;
+  display:flex;align-items:center;justify-content:center;gap:6px;transition:color .3s var(--ease);
+}
+.seg button:hover{color:var(--ink-2)}
+.seg button[aria-pressed="true"]{color:var(--ink)}
+.seg svg.i{width:15px;height:15px}
+
+/* material chips */
+.mats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.mat{
+  appearance:none;height:64px;border:1px solid var(--line);background:var(--white);border-radius:13px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 4px;cursor:pointer;color:var(--ink-2);
+  font:300 11px/1 var(--mono);letter-spacing:.02em;min-width:0;
+  transition:transform .35s var(--ease),color .3s var(--ease),border-color .3s var(--ease),background .3s var(--ease),box-shadow .35s var(--ease);
+}
+.mat span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mat:hover{color:var(--ink);transform:translateY(-2px);box-shadow:0 8px 18px -10px rgba(0,0,0,.18)}
+.mat:active{transform:scale(.97)}
+.mat[aria-pressed="true"]{background:var(--fillbg);border-color:transparent;color:var(--ink)}
+.mat .ball{width:22px;height:22px;transition:transform .45s var(--ease)}
+.mat:hover .ball{transform:scale(1.08)}
+
+/* background swatches */
+.bgs{display:flex;gap:8px;padding:2px 11px 4px;flex-wrap:wrap}
+.bgs button{
+  appearance:none;width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);cursor:pointer;padding:0;
+  transition:transform .3s var(--ease),box-shadow .3s var(--ease);
+}
+.bgs button:hover{transform:translateY(-1px)}
+.bgs button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--white),0 0 0 3px var(--ink-3)}
+.bgs .clr{background-image:linear-gradient(45deg,var(--fillfg) 25%,transparent 25%,transparent 75%,var(--fillfg) 75%),linear-gradient(45deg,var(--fillfg) 25%,transparent 25%,transparent 75%,var(--fillfg) 75%);background-size:8px 8px;background-position:0 0,4px 4px;background-color:var(--white)}
+
+/* layers */
+.layers{display:flex;flex-direction:column;gap:2px}
+.lrow{
+  display:flex;align-items:center;gap:10px;padding:0 4px 0 11px;height:38px;border-radius:11px;cursor:pointer;
+  color:var(--ink-2);transition:background .3s var(--ease),color .3s var(--ease);
+}
+.lrow:hover{color:var(--ink)}
+.lrow[aria-current="true"]{background:var(--fillbg);color:var(--ink)}
+.lrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow small{color:var(--ink-3);font-size:10px;white-space:nowrap}
+.lrow.hid .ball{opacity:.3}
+.lrow.hid .nm{color:var(--ink-3)}
+.acts{display:flex;opacity:0;transition:opacity .25s var(--ease)}
+.lrow:hover .acts,.lrow[aria-current="true"] .acts{opacity:1}
+@media (hover:none){.acts{opacity:1}}
+.acts button{appearance:none;width:26px;height:26px;border:0;background:transparent;border-radius:8px;color:var(--ink-3);display:grid;place-items:center;cursor:pointer;padding:0;transition:color .25s var(--ease),background .25s var(--ease)}
+.acts button:hover{color:var(--ink);background:rgba(0,0,0,.04)}
+.acts svg.i{width:14px;height:14px}
+
+.btn{
+  appearance:none;border:1px solid var(--line-2);background:var(--white);border-radius:11px;
+  height:34px;padding:0 12px;cursor:pointer;color:var(--ink-2);
+  font:300 11px/1 var(--mono);letter-spacing:.06em;
+  transition:transform .3s var(--ease),color .3s var(--ease),border-color .3s var(--ease),background .3s var(--ease);
+}
+.btn:hover{color:var(--ink);border-color:var(--ink-3)}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--fillfg);border-color:transparent;color:var(--ink)}
+.btn.primary:hover{background:#d8d4cc}
+.btn.quiet{border-color:rgba(192,120,124,.32);color:var(--danger)}
+.btn.quiet:hover{border-color:var(--danger)}
+.btnrow{display:flex;gap:6px}
+.btnrow .btn{flex:1}
+
+.veil{
+  position:fixed;inset:0;z-index:20;display:none;place-items:center;
+  background:rgba(250,250,248,.82);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  color:var(--ink-2);letter-spacing:.1em;text-transform:uppercase;font-size:11px;
+}
+.veil.on{display:grid}
+.toast{
+  position:fixed;left:50%;bottom:calc(92px + var(--safe-b));transform:translateX(-50%) translateY(8px);
+  background:var(--toast);color:var(--white);border-radius:999px;padding:9px 16px;
+  font-size:11px;letter-spacing:.06em;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  opacity:0;pointer-events:none;transition:opacity .35s var(--ease),transform .45s var(--ease);
+  z-index:30;white-space:nowrap;display:flex;align-items:center;gap:12px;
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.toast button{appearance:none;border:0;background:rgba(255,255,255,.14);color:var(--white);border-radius:999px;height:24px;padding:0 10px;font:400 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.toast button:hover{background:rgba(255,255,255,.24)}
+.fatal{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;color:var(--ink-2);line-height:1.8}
+@media (hover:none){.iconbtn:hover,.btn:hover,.mat:hover{transform:none}}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="board" id="board">
+    <canvas id="c"></canvas>
+    <svg class="guides" id="guides" preserveAspectRatio="none"></svg>
+    <div class="empty" id="empty">Draw anywhere. Slow down to pool, speed up to thin.</div>
+  </div>
+</div>
+<div class="ring" id="ring"></div>
+
+<div class="chrome">
+  <div class="brand">Slip &amp; Metal</div>
+  <div class="stat" id="stat">&nbsp;</div>
+
+  <div class="topright">
+    <div class="zoombar" id="zoombar">
+      <button class="zstep" data-z="out" title="Zoom out (−)">−</button>
+      <button class="zpct" data-z="pct" title="Zoom presets">100%</button>
+      <button class="zstep" data-z="in" title="Zoom in (+)">+</button>
+      <div class="zsep"></div>
+      <button class="zfit" data-z="fit" title="Fit (0)">Fit</button>
+      <div class="zmenu" data-z="menu"></div>
+    </div>
+    <button class="iconbtn" id="btnImage" title="Draw on an image">
+      <svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17.5l4.5-4.5 3 3 2.5-2.5 4 4"/></svg>
+    </button>
+    <button class="iconbtn" id="btnExport" title="Export PNG">
+      <svg class="i" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>
+    </button>
+    <button class="iconbtn" id="btnPanel" title="Settings (S)">
+      <svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+    </button>
+  </div>
+
+  <div class="pill" id="pill">
+    <div class="tools" id="tools">
+      <i class="thumb"></i>
+      <button data-tool="slip" title="Slip (B)"><span class="ball" id="ballSlip"></span>Slip</button>
+      <button data-tool="metal" title="Metal (B)"><span class="ball" id="ballMetal"></span>Metal</button>
+      <button data-tool="erase" title="Eraser (E)">
+        <svg class="i" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4-8.5 8.5H6l-1.5-1.5a1.5 1.5 0 010-2.1z"/><path d="M10 18h9"/></svg>Erase
+      </button>
+    </div>
+    <span class="psep"></span>
+    <button class="pi" id="undo" title="Undo (⌘Z)"><svg class="i" viewBox="0 0 24 24"><path d="M9 7L5 11l4 4"/><path d="M5 11h9a5 5 0 010 10h-2"/></svg></button>
+    <button class="pi" id="redo" title="Redo (⇧⌘Z)"><svg class="i" viewBox="0 0 24 24"><path d="M15 7l4 4-4 4"/><path d="M19 11h-9a5 5 0 000 10h2"/></svg></button>
+  </div>
+
+  <aside class="panel" id="panel">
+    <div class="phead">
+      <div class="tabs" role="tablist">
+        <button class="tab" data-tab="brush" role="tab">Brush</button>
+        <button class="tab" data-tab="surface" role="tab">Surface</button>
+        <button class="tab" data-tab="canvas" role="tab">Canvas</button>
+      </div>
+      <button class="xbtn" id="closePanel" title="Close (Esc)"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="pbody" id="pbody">
+      <div class="pane" data-pane="brush"></div>
+      <div class="pane" data-pane="surface"></div>
+      <div class="pane" data-pane="canvas"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="veil" id="veil">Drop an image to draw on it</div>
+<div class="toast" id="toast"></div>
+<input type="file" id="file" accept="image/*" hidden>
+
+<script>
+(() => {
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════
+   helpers
+   ════════════════════════════════════════════════════════════════════ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const uid = () => Math.random().toString(36).slice(2, 9);
+const hexRgb = hx => { const n = parseInt(hx.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+const lin = c => c.map(v => Math.pow(v, 2.2));
+const mix3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const toHex = c => '#' + c.map(v => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    const v = attrs[k];
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'html') el.innerHTML = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
+  return el;
+}
+const ICON = {
+  eye: '<svg class="i" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></svg>',
+  eyeOff: '<svg class="i" viewBox="0 0 24 24"><path d="M4 4l16 16M9.9 6A9.6 9.6 0 0112 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 01-2.7 3.4M6.4 7.6C3.9 9.4 2.5 12 2.5 12S6 18.5 12 18.5c1.6 0 3-.4 4.2-1"/></svg>',
+  up: '<svg class="i" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>',
+  down: '<svg class="i" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>',
+  del: '<svg class="i" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+};
+
+/* ════════════════════════════════════════════════════════════════════
+   brushes, presets, defaults
+   ════════════════════════════════════════════════════════════════════ */
+const SLIP_PRESETS = [
+  { name: 'Porcelain', color: '#E4E1DA', gloss: .55, brk: .3,  speckle: 0,   grain: .35 },
+  { name: 'Stoneware', color: '#D3C7B1', gloss: .3,  brk: .55, speckle: .6,  grain: .55 },
+  { name: 'Celadon',   color: '#98B6A1', gloss: .9,  brk: .85, speckle: .05, grain: .2 },
+  { name: 'Terracotta',color: '#B05A39', gloss: .05, brk: .2,  speckle: .12, grain: .8 },
+  { name: 'Tenmoku',   color: '#2C1C14', gloss: .9,  brk: .95, speckle: 0,   grain: .2 },
+  { name: 'Cobalt',    color: '#2B4893', gloss: .85, brk: .6,  speckle: .04, grain: .2 },
+  { name: 'Butter',    color: '#E5D093', gloss: .65, brk: .5,  speckle: .08, grain: .3 },
+  { name: 'Blush',     color: '#DFAA9B', gloss: .5,  brk: .45, speckle: .1,  grain: .35 },
+  { name: 'Ink',       color: '#1A1918', gloss: .95, brk: .15, speckle: 0,   grain: .15 },
+];
+const METAL_PRESETS = [
+  { name: 'Chrome',   c0: '#101215', c1: '#6F757B', c2: '#F6F7F8', sky: .39, rim: .86, contrast: 1,    brk: .15, rough: .08, grain: .7,  iri: 0 },
+  { name: 'Silver',   c0: '#2C2F33', c1: '#A3A8AE', c2: '#FCFCFB', sky: .5,  rim: .9,  contrast: .95,  brk: .1,  rough: .12, grain: .5,  iri: 0 },
+  { name: 'Mercury',  c0: '#15171A', c1: '#8E949B', c2: '#FFFFFF', sky: .4,  rim: .88, contrast: 1,    brk: .05, rough: 0,   grain: .12, iri: 0 },
+  { name: 'Gold',     c0: '#2E1A04', c1: '#A87A2E', c2: '#FFF1C4', sky: .4,  rim: .85, contrast: 1,    brk: .15, rough: .1,  grain: .6,  iri: 0 },
+  { name: 'Copper',   c0: '#2A1008', c1: '#A55A38', c2: '#FFDCC6', sky: .38, rim: .84, contrast: 1,    brk: .15, rough: .1,  grain: .6,  iri: 0 },
+  { name: 'Rose',     c0: '#341A1A', c1: '#B5827C', c2: '#FFF1EC', sky: .4,  rim: .86, contrast: 1,    brk: .15, rough: .1,  grain: .5,  iri: 0 },
+  { name: 'Gunmetal', c0: '#060708', c1: '#3B4047', c2: '#C6CBD2', sky: .22, rim: .7,  contrast: 1.1,  brk: .3,  rough: .14, grain: .8,  iri: 0 },
+  { name: 'Oil',      c0: '#0C0D10', c1: '#737981', c2: '#FFFFFF', sky: .38, rim: .84, contrast: 1.05, brk: .15, rough: .06, grain: .5,  iri: .85 },
+  { name: 'Comic',    c0: '#0A0A0A', c1: '#8A8A8A', c2: '#FFFFFF', sky: .92, rim: .06, contrast: 1.3,  brk: .95, rough: .1,  grain: .9,  iri: 0 },
+];
+const DEF = {
+  slip: {
+    size: 40, pressure: .8, speed: .7, tilt: .35, vary: .35, merge: .55, pool: 1, smooth: .35, end: 'drop', taper: 1.2,
+    color: '#E4E1DA', gloss: .55, shine: 1, brk: .3, speckle: 0, grain: .35, vol: 1, edge: 20, light: 120, shadow: 0, preset: 'Porcelain',
+  },
+  metal: {
+    size: 44, pressure: .8, speed: .75, tilt: .35, vary: .45, merge: .5, pool: 1.2, smooth: .3, end: 'drop', taper: 1.4,
+    c0: '#101215', c1: '#6F757B', c2: '#F6F7F8', sky: .39, rim: .86, contrast: 1, brk: .15, rough: .08, grain: .7, shine: 1, iri: 0,
+    vol: 1, edge: 60, light: 300, shadow: 0, preset: 'Chrome',
+  },
+};
+const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
+const NAMES = { slip: 'Slip', metal: 'Metal' };
+const BGS = [['Paper', '#F4F2EE'], ['Stone', '#E2DFD8'], ['Sand', '#CDBFAD'], ['Slate', '#6F747B'], ['Ink', '#161616'], ['Clear', 'none']];
+const BOARDS = [['4:3', 1600, 1200], ['1:1', 1400, 1400], ['3:4', 1200, 1600], ['16:9', 1920, 1080], ['9:16', 1080, 1920]];
+const mergeA = m => lerp(4.5, 1.32, clamp(m, 0, 1));    // field peak / threshold. Lower peak = longer tails = more fusing
+const ERASE_A = 2.2;
+
+/* ════════════════════════════════════════════════════════════════════
+   state
+   ════════════════════════════════════════════════════════════════════ */
+let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
+const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
+const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal } };
+const activeLayer = () => doc.layers.find(L => L.id === doc.active) || null;
+const layerById = id => doc.layers.find(L => L.id === id);
+
+function newLayer(brush, params) {
+  const n = doc.layers.filter(L => L.brush === brush).length + 1;
+  return { id: uid(), brush, name: NAMES[brush] + (n > 1 ? ' ' + n : ''), visible: true, seed: Math.random() * 100,
+           params: { ...(params || lastParams[brush]) }, strokes: [] };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   WebGL
+   ════════════════════════════════════════════════════════════════════ */
+const canvas = $('#c'), board = $('#board'), stage = $('#stage');
+const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false,
+  preserveDrawingBuffer: false, desynchronized: true, powerPreference: 'high-performance' });
+if (!gl) {
+  board.append(h('div', { class: 'fatal' }, 'This browser has no WebGL2, which the brushes need. Try a current Safari, Chrome or Firefox.'));
+  board.style.width = '520px'; board.style.height = '320px';
+  return;
+}
+gl.getExtension('EXT_color_buffer_float');
+gl.getExtension('EXT_color_buffer_half_float');
+gl.getExtension('EXT_float_blend');
+
+const VS_FULL = `#version 300 es
+const vec2 P[3] = vec2[3](vec2(-1.,-1.), vec2(3.,-1.), vec2(-1.,3.));
+out vec2 vUv;
+void main(){ vec2 p = P[gl_VertexID]; vUv = p*.5+.5; gl_Position = vec4(p,0.,1.); }`;
+
+const VS_STAMP = `#version 300 es
+layout(location=0) in vec2 aCorner;
+layout(location=1) in vec4 aStamp;   // x, y, sigma, weight (doc px)
+layout(location=2) in float aR;      // stroke radius at this stamp
+uniform vec2 uDoc; uniform float uMinSigma;
+out vec2 vD; out float vW; out float vR;
+void main(){
+  float s = max(aStamp.z, uMinSigma);
+  vD = aCorner * 3.2;
+  vW = aStamp.w; vR = aR;
+  vec2 p = aStamp.xy + aCorner * s * 3.2;
+  vec2 c = p / uDoc * 2. - 1.;
+  gl_Position = vec4(c.x, -c.y, 0., 1.);
+}`;
+const FS_STAMP = `#version 300 es
+precision highp float;
+in vec2 vD; in float vW; in float vR;
+uniform float uScale;
+out vec4 o;
+void main(){
+  float d2 = dot(vD, vD);
+  float k = exp(-.5*d2) * (1. - smoothstep(6.76, 10.24, d2));
+  float f = vW * k * uScale;
+  o = vec4(f, f * vR / 64., 0., 0.);
+}`;
+const FS_COPY = `#version 300 es
+precision highp float; in vec2 vUv; uniform sampler2D uSrc; out vec4 o;
+void main(){ o = texture(uSrc, vUv); }`;
+const FS_ERASE = `#version 300 es
+precision highp float; in vec2 vUv; uniform sampler2D uSrc, uE; uniform float uInv; out vec4 o;
+void main(){ vec4 f = texture(uSrc, vUv); float e = texture(uE, vUv).r * uInv; o = vec4(f.rg * clamp(1. - e, 0., 1.), 0., 0.); }`;
+const FS_BG = `#version 300 es
+precision highp float; in vec2 vUv; uniform vec3 uBg; uniform int uImg; uniform sampler2D uTex; out vec4 o;
+void main(){ o = uImg == 1 ? vec4(texture(uTex, vec2(vUv.x, 1. - vUv.y)).rgb, 1.) : vec4(uBg, 1.); }`;
+
+/* The material shader. The field texture holds R = summed gaussian density, G = density-weighted radius.
+   Surface = where R > 1. From R we recover the distance to the silhouette, then build the height as a
+   quarter-circle bevel of radius Edge: thin lines come out round, wide pools and merges go flat on top,
+   like a liquid held by surface tension (the reference brushes' puddles). */
+const FS_COMP = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uField;
+uniform vec2 uRes, uDoc;
+uniform float uInv, uA, uVol, uBevel, uBulge;
+uniform vec3 uL;
+uniform int uBrush;
+uniform vec3 uC0, uC1, uC2;
+uniform float uGloss, uShine, uBreak, uSpeckle, uGrain, uRough, uContrast, uIri, uShadow, uShadowDist, uSeed, uSky, uRim;
+out vec4 o;
+
+vec2 F(vec2 uv){ return texture(uField, uv).rg * uInv; }
+float lnA;
+// 0 at the silhouette, 1 on the ridge of a lone line (exact for a straight gaussian ridge)
+float innerE(float R){ return R >= uA ? 1. : 1. - sqrt(max(log(uA / R) / lnA, 0.)); }
+float H(vec2 uv){
+  vec2 f = F(uv);
+  if (f.x <= 1.) return 0.;
+  float rad = f.y / f.x * 64.;
+  float over = max(f.x / uA - 1., 0.);
+  float B = max(min(rad, uBevel), .5);
+  float d = innerE(f.x) * rad + over * rad * .6;
+  float t = min(d / B, 1.);
+  return B * sqrt(1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3;
+}
+float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
+float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 4; i++){ s += a * vnoise(p); p = p * 2.03 + 17.1; a *= .5; } return s; }
+
+void main(){
+  lnA = log(uA);
+  vec2 uv = vUv;
+  vec2 c = F(uv);
+  float R = c.x;
+  float fw = max(fwidth(R), 1e-4);
+  vec2 doc = vec2(uv.x, 1. - uv.y) * uDoc;
+
+  // optional soft cast shadow (off by default: the references carry depth in the material alone)
+  float shA = 0.;
+  if (uShadow > 0.) {
+    vec2 tl = normalize(uL.xy + vec2(1e-5));
+    vec2 so = vec2(tl.x, -tl.y) * uShadowDist / uDoc;
+    vec2 sp = vec2(-so.y, so.x) * .5;
+    float rs = .25 * (F(uv + so + sp).x + F(uv + so - sp).x + F(uv + so * 1.5).x + F(uv + so * .6).x);
+    shA = clamp(max(smoothstep(.06, 1.3, rs) * .5, smoothstep(.3, 1., R) * .28) * uShadow, 0., 1.);
+  }
+
+  float a = clamp((R - 1.) / (fw * 1.5) + .5, 0., 1.);
+  if (a <= 0. && shA < .002) { o = vec4(0.); return; }
+
+  vec3 col = vec3(0.);
+  if (a > 0.) {
+    vec2 t = 1.1 / uRes;
+    float tDoc = 2. * 1.1 * uDoc.x / uRes.x;
+    float hl = H(uv - vec2(t.x, 0.)), hR = H(uv + vec2(t.x, 0.));
+    float hu = H(uv + vec2(0., t.y)), hd = H(uv - vec2(0., t.y));
+    vec3 N0 = normalize(vec3(-(hR - hl) / tDoc * uVol, -(hd - hu) / tDoc * uVol, 1.));
+    vec3 N = N0;
+    vec3 L = uL, V = vec3(0., 0., 1.);
+    vec2 Lxy = normalize(L.xy + vec2(1e-5));
+    float rad = c.y / max(c.x, 1e-4) * 64.;
+    float e0 = innerE(max(R, 1.0001));
+    float wob = fbm(doc / 120. + uSeed) - .5;
+    // fine photographic grain: two octaves of ~1 doc-px noise
+    float gn = (hash(floor(doc * 1.4) + uSeed) - .5) * .9 + (vnoise(doc / 1.6 + uSeed * 3.1) - .5) * .7;
+
+    if (uBrush == 0) {
+      // ── glazed ceramic / slip ──
+      vec2 op = doc / 2.8 + uSeed;
+      N = normalize(N + vec3(vnoise(op) - .5, vnoise(op + 9.1) - .5, 0.) * uGrain * .08);
+      vec2 lp = doc / 30. + uSeed * 5.;                                 // gentle hand-made lumps
+      float l0 = vnoise(lp) + .5 * vnoise(lp * 2.1 + 3.3);
+      float lx = vnoise(lp + vec2(.3, 0.)) + .5 * vnoise((lp + vec2(.3, 0.)) * 2.1 + 3.3);
+      float ly = vnoise(lp + vec2(0., .3)) + .5 * vnoise((lp + vec2(0., .3)) * 2.1 + 3.3);
+      N = normalize(N + vec3(l0 - lx, l0 - ly, 0.) * (.1 + .2 * uGrain) * smoothstep(0., .35, e0));
+      float mott = fbm(doc / 34. + uSeed * 2.) - .5;
+      vec3 base = uC0;
+      float thin = 1. - smoothstep(.1, .8, e0);
+      vec3 brk = mix(base, vec3(1., .84, .62), .4);               // glaze breaks warm & pale on thin edges
+      vec3 alb = mix(base, brk, thin * uBreak * .8);
+      alb *= 1. + mott * .035 * (.35 + uGrain) + gn * .02 * uGrain;
+      vec2 cell = floor(doc / 4.2), fc = fract(doc / 4.2);          // iron speckle
+      float on = step(1. - uSpeckle * .2, hash(cell + uSeed));
+      vec2 cp = vec2(hash(cell + 3.1), hash(cell + 7.7)) * .6 + .2;
+      float rr = .1 + .26 * hash(cell + 11.3);
+      alb = mix(alb, vec3(.035, .025, .02), on * (1. - smoothstep(rr * .55, rr, length(fc - cp))) * .9);
+      float ndl = dot(N, L);
+      float diff = smoothstep(-.6, .95, ndl);
+      float amb = .35 + .65 * N.z;
+      col = alb * (.34 * amb + mix(.72, .6, uGloss) * diff * diff);
+      vec3 Rr = reflect(-V, N);
+      float rl = dot(Rr, L);
+      float sheen = smoothstep(.45, .98, rl); sheen *= sheen;      // broad satin band along the lit crest
+      col += sheen * mix(.05, .24, uGloss) * uShine;
+      float glint = smoothstep(mix(.94, .978, uGloss), .996, rl + gn * .02);
+      col += glint * smoothstep(.55, .95, uGloss) * uShine * .5;        // crisp glint only on real glazes
+      float away = clamp(-dot(normalize(N.xy + 1e-5), Lxy), 0., 1.);
+      col += alb * .07 * smoothstep(.55, 1., 1. - N.z) * away;      // bounce light on the shadow rim
+    } else {
+      // ── liquid metal ──
+      vec2 np = doc / 6. + uSeed;
+      N = normalize(N + vec3(vnoise(np) - .5, vnoise(np + 31.7) - .5, 0.) * uRough * .9);
+      vec3 Rr = reflect(-V, N);
+      float tilt = 1. - N.z;                                         // 0 = flat top, 1 = vertical wall
+      float side = dot(normalize(N.xy + 1e-5), Lxy) * smoothstep(.0, .2, tilt);
+      // the flat top mirrors the room overhead (Sky), the bevel mirrors the bright floor around it (Rim);
+      // the boundary between them is dithered by the grain, which is what reads as real metal
+      float hc = H(uv), px = uDoc.x / uRes.x, hs = tDoc * .5;
+      float turn = .9 * max(abs(hl + hR - 2. * hc), abs(hu + hd - 2. * hc)) / (hs * hs) * uVol * px;
+      float w = max(.015, min(turn, .06));                            // boundary stays crisp; Banding only shapes the palette
+      float t1 = .11 + wob * .05;
+      float tt = smoothstep(t1 - w - .012, t1 + w + .012, tilt);
+      float dn = hash(floor(doc * 1.7) + uSeed * 1.3) - .5;              // crisp per-pixel dither, like film grain
+      tt = clamp(tt + dn * 1.1 * uGrain * (1. - abs(2. * tt - 1.)), 0., 1.);   // grain only dithers the boundary
+      float top = uSky + wob * .2 + gn * .14 * uGrain + .1 * clamp(side * 4., -1., 1.) * smoothstep(0., t1, tilt);
+      // bevel profile sampled from the reference: away from the light it brightens toward the outer edge,
+      // on the lit side it peaks right after the boundary (where the glint sits) and falls off outward
+      float sAway = mix(.76, 1.07, smoothstep(t1, .75, tilt));
+      float sLit = mix(1., .88, smoothstep(t1, .9, tilt));
+      float rimv = uRim * mix(sAway, sLit, smoothstep(-.15, .55, side)) - .12 * smoothstep(.9, 1., tilt) + gn * .02 * uGrain;
+      float e = mix(top, rimv, tt);
+      float rl = dot(Rr, L);
+      float az = dot(normalize(Rr.xy + 1e-5), Lxy);
+      float lineSpec = (1. - smoothstep(0., mix(.03, .09, uRough), abs(Rr.z - L.z))) * smoothstep(.15, .85, az);   // long softbox
+      float spec = max(lineSpec * .85, smoothstep(mix(.955, .9, uRough), .997, rl));
+      e += spec * uShine * .9;
+      e = clamp((e - .5) * uContrast + .5, 0., 1.);
+      float k = max(mix(.5, .03, uBreak), min(turn * 1.2, .12));
+      float tp = e < .5 ? e * 2. : e * 2. - 1.;
+      tp = mix(tp, smoothstep(.5 - k, .5 + k, tp), uBreak);          // Banding: linear ramp → posterised steps
+      vec3 cm = e < .5 ? mix(uC0, uC1, tp) : mix(uC1, uC2, tp);
+      vec3 iri = .5 + .5 * cos(6.2831 * (vec3(0., .33, .67) + Rr.z * 1.1 + side * .25 + wob * 1.5));
+      cm = mix(cm, cm * (.3 + 1.15 * iri), uIri);
+      col = cm;
+    }
+  }
+  col = col / (1. + max(col - 1., 0.));
+  vec3 srgb = pow(max(col, 0.), vec3(1. / 2.2));
+  o = vec4(srgb * a, a + (1. - a) * shA);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name.replace('[0]', '')] = gl.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+const PR = {
+  stamp: program(VS_STAMP, FS_STAMP),
+  copy: program(VS_FULL, FS_COPY),
+  erase: program(VS_FULL, FS_ERASE),
+  bg: program(VS_FULL, FS_BG),
+  comp: program(VS_FULL, FS_COMP),
+};
+
+// stamp geometry: one quad, instanced per stamp
+const stampVAO = gl.createVertexArray();
+gl.bindVertexArray(stampVAO);
+const cornerBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const instBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
+gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 20, 0); gl.vertexAttribDivisor(1, 1);
+gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 20, 16); gl.vertexAttribDivisor(2, 1);
+gl.bindVertexArray(null);
+const emptyVAO = gl.createVertexArray();
+
+// field format: half-float where possible; 8-bit with a scaled range as a last resort
+const FMT8 = { internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE };
+let FIELD = { internal: gl.RGBA16F, format: gl.RGBA, type: gl.HALF_FLOAT, scale: 1 };
+function makeTarget(w, hgt, fmt) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, fmt.internal, w, hgt, 0, fmt.format, fmt.type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fb, w, h: hgt, ok };
+}
+{
+  const t = makeTarget(4, 4, FIELD);
+  if (!t.ok) FIELD = { ...FMT8, scale: 1 / 12 };
+  freeTarget(t);
+}
+function freeTarget(t) { if (!t) return; gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
+function swapTarget(a, b) { [a.tex, b.tex] = [b.tex, a.tex]; [a.fb, b.fb] = [b.fb, a.fb]; }
+function clearTarget(t) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.viewport(0, 0, t.w, t.h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
+function bindTex(unit, tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); }
+function fullscreen(prog, target, setup) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+  gl.viewport(0, 0, target ? target.w : canvas.width, target ? target.h : canvas.height);
+  gl.useProgram(prog.p); setup(prog.u);
+  gl.bindVertexArray(emptyVAO); gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   strokes → stamps
+   ════════════════════════════════════════════════════════════════════ */
+class FBuf {
+  constructor() { this.a = new Float32Array(1 << 15); this.n = 0; }
+  reset() { this.n = 0; }
+  p(x, y, s, w, r) {
+    if (this.n + 5 > this.a.length) { const b = new Float32Array(this.a.length * 2); b.set(this.a); this.a = b; }
+    const a = this.a, n = this.n; a[n] = x; a[n + 1] = y; a[n + 2] = s; a[n + 3] = w; a[n + 4] = r; this.n = n + 5;
+  }
+}
+const BUF = new FBuf(), EBUF = new FBuf();
+const SQ2PI = Math.sqrt(2 * Math.PI);
+const hash1 = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+function noise1(seed, x) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return lerp(hash1(i + seed * 17.3), hash1(i + 1 + seed * 17.3), u) * 2 - 1; }
+
+function emitter(out, sym, W, H) {
+  const cx = W / 2, cy = H / 2;
+  if (sym === 'x') return (x, y, s, w, r) => { out.p(x, y, s, w, r); out.p(2 * cx - x, y, s, w, r); };
+  if (sym === 'y') return (x, y, s, w, r) => { out.p(x, y, s, w, r); out.p(x, 2 * cy - y, s, w, r); };
+  if (sym === 'xy') return (x, y, s, w, r) => { out.p(x, y, s, w, r); out.p(2 * cx - x, y, s, w, r); out.p(x, 2 * cy - y, s, w, r); out.p(2 * cx - x, 2 * cy - y, s, w, r); };
+  if (sym === 'r6') {
+    const cs = [], sn = [];
+    for (let i = 0; i < 6; i++) { cs.push(Math.cos(i * Math.PI / 3)); sn.push(Math.sin(i * Math.PI / 3)); }
+    return (x, y, s, w, r) => { const dx = x - cx, dy = y - cy; for (let i = 0; i < 6; i++) out.p(cx + dx * cs[i] - dy * sn[i], cy + dx * sn[i] + dy * cs[i], s, w, r); };
+  }
+  return (x, y, s, w, r) => out.p(x, y, s, w, r);
+}
+
+/* Raw samples are x, y, pressure, t(ms), altitude(0..1). Every slider is applied here, at build time,
+   which is why the whole drawing can be retuned after the fact. */
+function strokeStamps(st, P, out, W, H, minSig) {
+  const pts = st.pts, n = pts.length / 5;
+  if (!n) return;
+  const erase = !!st.erase;
+  const A = erase ? ERASE_A : mergeA(P.merge);
+  const base = (erase ? st.size : P.size) * .5;
+  const prI = erase ? .5 : P.pressure, spI = erase ? 0 : P.speed, tiI = erase ? 0 : P.tilt;
+  const smoothK = erase ? .15 : P.smooth, poolK = erase ? 0 : P.pool, vary = erase ? 0 : P.vary;
+  const end = erase ? 'none' : P.end;
+  const vref = 1.1 * W / 1600;
+  const emit = emitter(out, st.sym, W, H);
+  const sigK = 1 / Math.sqrt(2 * Math.log(A));
+  const dot = (x, y, r, wf) => { const sg = Math.max(r * sigK, minSig); emit(x, y, sg, A * wf, r); };
+
+  // 1. per-sample radius from pressure, speed and tilt; lazy-point smoothing of the path; pooling when still
+  const a = 1 - smoothK * .86;
+  const X = [], Y = [], Rr = [], pools = [];
+  let sx = pts[0], sy = pts[1], vs = 0, rs = -1;
+  let ax = pts[0], ay = pts[1], at = pts[3], poolR = 0, poolX = 0, poolY = 0;
+  for (let i = 0; i < n; i++) {
+    const o = i * 5, x = pts[o], y = pts[o + 1], p = pts[o + 2], t = pts[o + 3], al = pts[o + 4];
+    if (i) {
+      const dt = Math.max(1, t - pts[o - 2]);
+      const v = Math.hypot(x - pts[o - 5], y - pts[o - 4]) / dt;
+      vs += (v - vs) * Math.min(1, dt / 40);
+      sx += (x - sx) * a; sy += (y - sy) * a;
+    }
+    const pf = st.hasP ? lerp(1, .15 + 1.6 * Math.pow(clamp(p, 0, 1), .85), prI) : 1;
+    const sf = lerp(1, .5 + 1.3 * Math.exp(-vs / (1.6 * vref)), spI);     // ~1 at a relaxed pace, swells when slow
+    const tf = st.hasT ? lerp(1, 1 + 1.5 * Math.pow(1 - clamp(al, 0, 1), 1.5), tiI) : 1;
+    const r = base * pf * sf * tf;
+    rs = rs < 0 ? r : rs + (r - rs) * .35;
+    if (Math.hypot(x - ax, y - ay) > Math.max(2, base * .15)) {
+      if (poolR) { pools.push(poolX, poolY, poolR); poolR = 0; }
+      ax = x; ay = y; at = t;
+    } else if (poolK > 0 && t - at > 90) {
+      poolR = rs * (1 + poolK * .9 * (1 - Math.exp(-(t - at - 90) / 650))); poolX = ax; poolY = ay;
+    }
+    X.push(sx); Y.push(sy); Rr.push(rs);
+  }
+  if (poolR) pools.push(poolX, poolY, poolR);
+  if (n > 1 && a < 1) {
+    const lx = pts[(n - 1) * 5], ly = pts[(n - 1) * 5 + 1];
+    for (let k = 0; k < 40 && Math.hypot(lx - sx, ly - sy) > .3; k++) { sx += (lx - sx) * a; sy += (ly - sy) * a; X.push(sx); Y.push(sy); Rr.push(rs); }
+  }
+
+  // 2. dense Catmull-Rom polyline
+  const m = X.length;
+  const DX = [X[0]], DY = [Y[0]], DR = [Rr[0]];
+  for (let i = 0; i < m - 1; i++) {
+    const x1 = X[i], y1 = Y[i], x2 = X[i + 1], y2 = Y[i + 1];
+    const ch = Math.hypot(x2 - x1, y2 - y1);
+    if (ch < 1e-3) continue;
+    const i0 = Math.max(0, i - 1), i3 = Math.min(m - 1, i + 2);
+    const x0 = X[i0], y0 = Y[i0], x3 = X[i3], y3 = Y[i3];
+    const steps = Math.max(1, Math.ceil(ch / 1.5));
+    for (let j = 1; j <= steps; j++) {
+      const t = j / steps, t2 = t * t, t3 = t2 * t;
+      DX.push(.5 * (2 * x1 + (-x0 + x2) * t + (2 * x0 - 5 * x1 + 4 * x2 - x3) * t2 + (-x0 + 3 * x1 - 3 * x2 + x3) * t3));
+      DY.push(.5 * (2 * y1 + (-y0 + y2) * t + (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 + (-y0 + 3 * y1 - 3 * y2 + y3) * t3));
+      DR.push(lerp(Rr[i], Rr[i + 1], t));
+    }
+  }
+  const k = DX.length;
+  const S = new Float32Array(k);
+  let L = 0;
+  for (let i = 1; i < k; i++) { L += Math.hypot(DX[i] - DX[i - 1], DY[i] - DY[i - 1]); S[i] = L; }
+
+  // 3. walk the line, spacing stamps by their own sigma; weight so a straight run sums to exactly A
+  if (L < .75) {
+    let r = DR[0] * 1.15;
+    if (pools.length) r = Math.max(r, pools[2] * 1.05);
+    dot(DX[0], DY[0], r, 1);
+    return;
+  }
+  const seed = st.seed || 0;
+  const ns1 = 1 / (base * 3 + 10), ns2 = 1 / (base * 1.1 + 4);
+  const wl = end === 'wedge' ? Math.min(P.taper * base * 3.2, L * .5) : 0;
+  let next = 0, seg = 1;
+  while (next <= L) {
+    while (seg < k - 1 && S[seg] < next) seg++;
+    const s0 = S[seg - 1], s1 = S[seg], t = s1 > s0 ? clamp((next - s0) / (s1 - s0), 0, 1) : 0;
+    const x = lerp(DX[seg - 1], DX[seg], t), y = lerp(DY[seg - 1], DY[seg], t);
+    let r = lerp(DR[seg - 1], DR[seg], t);
+    if (vary) r *= 1 + vary * (.5 * noise1(seed, next * ns1) + .22 * noise1(seed + 7.3, next * ns2));
+    if (wl) r *= .04 + .96 * Math.min(sstep(0, 1, next / (wl * .7)), sstep(0, 1, (L - next) / wl));
+    r = Math.max(.05, r);
+    const sg = Math.max(r * sigK, minSig);
+    const sp = Math.max(.3, .7 * sg);
+    emit(x, y, sg, A * sp / (SQ2PI * sg), r);
+    next += sp;
+  }
+  if (end === 'drop') {
+    dot(DX[0], DY[0], DR[0] * 1.04, .55);
+    dot(DX[k - 1], DY[k - 1], DR[k - 1] * 1.06, .6);
+  }
+  for (let i = 0; i < pools.length; i += 3) dot(pools[i], pools[i + 1], pools[i + 2], 1);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   field building
+   ════════════════════════════════════════════════════════════════════ */
+const T = { S: 1, w: 0, h: 0, layers: new Map(), live: null, scratch: null, erase: null };
+const dirty = new Set();
+let needsDraw = true;
+
+function drawStamps(target, buf, minSig) {
+  if (!buf.n) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb);
+  gl.viewport(0, 0, target.w, target.h);
+  gl.useProgram(PR.stamp.p);
+  gl.uniform2f(PR.stamp.u.uDoc, doc.w, doc.h);
+  gl.uniform1f(PR.stamp.u.uMinSigma, minSig);
+  gl.uniform1f(PR.stamp.u.uScale, FIELD.scale);
+  gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.bindVertexArray(stampVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, buf.a.subarray(0, buf.n), gl.DYNAMIC_DRAW);
+  gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, buf.n / 5);
+  gl.disable(gl.BLEND);
+  gl.bindVertexArray(null);
+}
+function copyInto(src, dst) {
+  gl.disable(gl.BLEND);
+  fullscreen(PR.copy, dst, u => { bindTex(0, src.tex); gl.uniform1i(u.uSrc, 0); });
+}
+function eraseInto(src, eTarget, dst) {
+  gl.disable(gl.BLEND);
+  fullscreen(PR.erase, dst, u => { bindTex(0, src.tex); bindTex(1, eTarget.tex); gl.uniform1i(u.uSrc, 0); gl.uniform1i(u.uE, 1); gl.uniform1f(u.uInv, 1 / FIELD.scale); });
+}
+// ctx = { field, scratch, erase, minSig }
+function buildLayer(L, ctx, bounds) {
+  clearTarget(ctx.field);
+  BUF.reset();
+  for (const st of L.strokes) {
+    if (st.erase) {
+      drawStamps(ctx.field, BUF, ctx.minSig); BUF.reset();
+      clearTarget(ctx.erase); EBUF.reset();
+      strokeStamps(st, L.params, EBUF, doc.w, doc.h, ctx.minSig);
+      drawStamps(ctx.erase, EBUF, ctx.minSig);
+      eraseInto(ctx.field, ctx.erase, ctx.scratch);
+      swapTarget(ctx.field, ctx.scratch);
+    } else {
+      const n0 = BUF.n;
+      strokeStamps(st, L.params, BUF, doc.w, doc.h, ctx.minSig);
+      if (bounds) growBounds(bounds, BUF, n0);
+    }
+  }
+  drawStamps(ctx.field, BUF, ctx.minSig); BUF.reset();
+}
+function growBounds(b, buf, from) {
+  const a = buf.a;
+  for (let i = from; i < buf.n; i += 5) {
+    const e = a[i + 2] * 2.2;
+    if (a[i] - e < b[0]) b[0] = a[i] - e; if (a[i + 1] - e < b[1]) b[1] = a[i + 1] - e;
+    if (a[i] + e > b[2]) b[2] = a[i] + e; if (a[i + 1] + e > b[3]) b[3] = a[i + 1] + e;
+  }
+}
+function liveCtx(L) { return { field: layerTarget(L), scratch: T.scratch, erase: T.erase, minSig: .7 / T.S }; }
+function layerTarget(L) {
+  let t = T.layers.get(L.id);
+  if (!t) { t = makeTarget(T.w, T.h, FIELD); clearTarget(t); T.layers.set(L.id, t); dirty.add(L.id); }
+  return t;
+}
+function rebuild(L) { buildLayer(L, liveCtx(L)); }
+function renderLive(L, st) {
+  const src = layerTarget(L);
+  const minSig = .7 / T.S;
+  if (st.erase) {
+    clearTarget(T.erase); EBUF.reset();
+    strokeStamps(st, L.params, EBUF, doc.w, doc.h, minSig);
+    drawStamps(T.erase, EBUF, minSig);
+    eraseInto(src, T.erase, T.live);
+  } else {
+    copyInto(src, T.live);
+    BUF.reset(); strokeStamps(st, L.params, BUF, doc.w, doc.h, minSig);
+    drawStamps(T.live, BUF, minSig); BUF.reset();
+  }
+}
+function commitStroke(L, st) {
+  if (dirty.has(L.id)) return;              // a pending rebuild will include it
+  const src = layerTarget(L), minSig = .7 / T.S;
+  if (st.erase) {
+    clearTarget(T.erase); EBUF.reset();
+    strokeStamps(st, L.params, EBUF, doc.w, doc.h, minSig);
+    drawStamps(T.erase, EBUF, minSig);
+    eraseInto(src, T.erase, T.scratch);
+    swapTarget(src, T.scratch);
+  } else {
+    BUF.reset(); strokeStamps(st, L.params, BUF, doc.w, doc.h, minSig);
+    drawStamps(src, BUF, minSig); BUF.reset();
+  }
+}
+function resizeTargets(w, hgt) {
+  for (const t of T.layers.values()) freeTarget(t);
+  T.layers.clear();
+  freeTarget(T.live); freeTarget(T.scratch); freeTarget(T.erase);
+  T.w = w; T.h = hgt;
+  T.live = makeTarget(w, hgt, FIELD); T.scratch = makeTarget(w, hgt, FIELD); T.erase = makeTarget(w, hgt, FIELD);
+  for (const L of doc.layers) dirty.add(L.id);
+}
+function gcTargets() {
+  for (const [id, t] of T.layers) if (!layerById(id)) { freeTarget(t); T.layers.delete(id); }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   compositing
+   ════════════════════════════════════════════════════════════════════ */
+let imgTex = null, imgTexSrc = null;
+function ensureImgTex() {
+  if (doc.bgImage === imgTexSrc) return;
+  if (imgTex) { gl.deleteTexture(imgTex); imgTex = null; }
+  imgTexSrc = doc.bgImage;
+  if (!doc.bgImage) return;
+  imgTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, imgTex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, doc.bgImage);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+function drawBg(target, transparent) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+  gl.viewport(0, 0, target ? target.w : canvas.width, target ? target.h : canvas.height);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  if (transparent) return;
+  ensureImgTex();
+  if (!doc.bgImage && doc.bg === 'none') return;
+  fullscreen(PR.bg, target, u => {
+    const c = doc.bg === 'none' ? [1, 1, 1] : hexRgb(doc.bg);
+    gl.uniform3f(u.uBg, c[0], c[1], c[2]);
+    gl.uniform1i(u.uImg, doc.bgImage ? 1 : 0);
+    bindTex(0, imgTex); gl.uniform1i(u.uTex, 0);
+  });
+}
+function lightDir(deg, el = .66) {
+  const a = deg * Math.PI / 180;
+  return [Math.cos(a) * Math.cos(el), -Math.sin(a) * Math.cos(el), Math.sin(el)];
+}
+function drawLayer(L, tex, target, tw, th) {
+  const P = L.params;
+  gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  fullscreen(PR.comp, target, u => {
+    bindTex(0, tex); gl.uniform1i(u.uField, 0);
+    gl.uniform2f(u.uRes, tw, th); gl.uniform2f(u.uDoc, doc.w, doc.h);
+    gl.uniform1f(u.uInv, 1 / FIELD.scale);
+    gl.uniform1f(u.uA, mergeA(P.merge)); gl.uniform1f(u.uVol, P.vol);
+    gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, L.brush === 'metal' ? 0 : .5);
+    gl.uniform1f(u.uSky, P.sky ?? .3); gl.uniform1f(u.uRim, P.rim ?? .85);
+    const Ld = lightDir(P.light, L.brush === 'metal' ? .44 : .66); gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
+    const metal = L.brush === 'metal';
+    gl.uniform1i(u.uBrush, metal ? 1 : 0);
+    const c0 = lin(hexRgb(metal ? P.c0 : P.color)), c1 = metal ? lin(hexRgb(P.c1)) : [0, 0, 0], c2 = metal ? lin(hexRgb(P.c2)) : [0, 0, 0];
+    gl.uniform3f(u.uC0, ...c0); gl.uniform3f(u.uC1, ...c1); gl.uniform3f(u.uC2, ...c2);
+    gl.uniform1f(u.uGloss, P.gloss ?? 0); gl.uniform1f(u.uShine, P.shine ?? 1); gl.uniform1f(u.uBreak, P.brk ?? 0);
+    gl.uniform1f(u.uSpeckle, P.speckle ?? 0); gl.uniform1f(u.uGrain, P.grain ?? 0); gl.uniform1f(u.uRough, P.rough ?? 0);
+    gl.uniform1f(u.uContrast, P.contrast ?? 1); gl.uniform1f(u.uIri, P.iri ?? 0);
+    gl.uniform1f(u.uShadow, P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
+    gl.uniform1f(u.uSeed, L.seed || 0);
+  });
+  gl.disable(gl.BLEND);
+}
+function compositeScreen() {
+  drawBg(null, false);
+  for (const L of doc.layers) {
+    if (!L.visible) continue;
+    const tex = drawing && drawing.L === L ? T.live.tex : layerTarget(L).tex;
+    drawLayer(L, tex, null, T.w, T.h);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   frame loop
+   ════════════════════════════════════════════════════════════════════ */
+let raf = 0, lastMs = 0, liveP = null;
+const request = () => { needsDraw = true; if (!raf) raf = requestAnimationFrame(frame); };
+function frame() {
+  raf = 0;
+  const t0 = performance.now();
+  if (drawing && !drawing.st.erase && drawing.L.params.pool > 0 && t0 - drawing.lastMove > 24) {
+    const p = drawing.st.pts, n = p.length;
+    if (n) p.push(p[n - 5], p[n - 4], p[n - 3], t0 - drawing.t0, p[n - 1]);    // still pen: let the slip pool
+  }
+  for (const id of dirty) { const L = layerById(id); if (L) rebuild(L); }
+  dirty.clear();
+  if (drawing) renderLive(drawing.L, drawing.st);
+  compositeScreen();
+  needsDraw = false;
+  lastMs = lastMs ? lerp(lastMs, performance.now() - t0, .2) : performance.now() - t0;
+  updateStat();
+  if (drawing) raf = requestAnimationFrame(frame);
+}
+const statEl = $('#stat');
+function updateStat() {
+  let s = `${doc.w}×${doc.h} · ${lastMs.toFixed(1)} ms`;
+  if (liveP) s += ` · ${liveP.kind} ${liveP.p.toFixed(2)}${liveP.tilt != null ? ' · tilt ' + liveP.tilt + '°' : ''}`;
+  statEl.textContent = s;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   view: fit / zoom / pan (creative-tool-ui canvas view, adapted for drawing)
+   ════════════════════════════════════════════════════════════════════ */
+const view = { z: 1, x: 0, y: 0 };
+const zoomBar = $('#zoombar');
+const zq = s => zoomBar.querySelector(`[data-z="${s}"]`);
+let cssW = 0, cssH = 0;
+const pctOf = z => cssW ? cssW * z / doc.w * 100 : 100;
+const zOfPct = p => p / 100 * doc.w / Math.max(1, cssW);
+const atFit = () => Math.abs(view.z - 1) < .001;
+function fit() {
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  if (!sw || !sh) return;
+  const k = Math.min(sw / doc.w, sh / doc.h);
+  cssW = Math.round(doc.w * k); cssH = Math.round(doc.h * k);
+  board.style.width = cssW + 'px'; board.style.height = cssH + 'px';
+  applyView(); scheduleRes();
+}
+function clampView() {
+  if (view.z <= 1) { view.x = 0; view.y = 0; return; }
+  const mx = (cssW * view.z - cssW) / 2 + cssW * .25, my = (cssH * view.z - cssH) / 2 + cssH * .25;
+  view.x = clamp(view.x, -mx, mx); view.y = clamp(view.y, -my, my);
+}
+function applyView() {
+  clampView();
+  board.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  zq('pct').textContent = Math.round(pctOf(view.z)) + '%';
+  zq('fit').setAttribute('aria-pressed', String(atFit()));
+  if (T.w) scheduleRes();
+}
+const untransformedCentre = () => { const r = board.getBoundingClientRect(); return [r.left + r.width / 2 - view.x, r.top + r.height / 2 - view.y]; };
+function zoomAt(px, py, factor) {
+  const [cx, cy] = untransformedCentre();
+  const z = clamp(view.z * factor, Math.min(1, zOfPct(5)), zOfPct(3200));
+  const ix = (px - cx - view.x) / view.z, iy = (py - cy - view.y) / view.z;
+  view.x = px - cx - z * ix; view.y = py - cy - z * iy; view.z = z;
+  applyView();
+}
+let easeT;
+function eased(fn) { board.classList.add('easing'); fn(); clearTimeout(easeT); easeT = setTimeout(() => board.classList.remove('easing'), 460); }
+const stageCentre = () => { const r = stage.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+const zoomToPct = p => eased(() => { const [x, y] = stageCentre(); zoomAt(x, y, zOfPct(p) / view.z); });
+const zoomStep = d => eased(() => { const [x, y] = stageCentre(); zoomAt(x, y, d > 0 ? 1.5 : 1 / 1.5); });
+const fitView = () => eased(() => { view.z = 1; view.x = 0; view.y = 0; applyView(); });
+let resT = 0;
+function scheduleRes() { clearTimeout(resT); resT = setTimeout(updateResolution, T.w ? 140 : 0); }
+function updateResolution() {
+  if (drawing) { scheduleRes(); return; }
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let S = clamp(cssW * dpr * Math.max(1, view.z) / doc.w, .35, 3);   // follow zoom so close-ups stay crisp
+  const maxPx = isTouchUI ? 4.2e6 : 6e6;
+  if (doc.w * doc.h * S * S > maxPx) S = Math.sqrt(maxPx / (doc.w * doc.h));
+  const tw = Math.round(doc.w * S), th = Math.round(doc.h * S);
+  if (tw === T.w && th === T.h) return;
+  if (T.w && Math.abs(tw / T.w - 1) < .12 && tw < T.w) return;          // small zoom-outs keep the sharper field
+  T.S = tw / doc.w;
+  canvas.width = tw; canvas.height = th;
+  resizeTargets(tw, th);
+  request();
+}
+new ResizeObserver(fit).observe(stage);
+addEventListener('wheel', e => {
+  if (!stage.contains(e.target)) return;
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+  if (e.metaKey || e.ctrlKey) {
+    e.preventDefault();
+    const pinch = e.ctrlKey && !e.metaKey;
+    zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * unit * (pinch ? .01 : .0025)));
+  } else if (view.z > 1) {
+    e.preventDefault();
+    view.x -= e.deltaX * unit; view.y -= e.deltaY * unit; applyView();
+  }
+}, { passive: false });
+{
+  const menu = zq('menu');
+  zq('pct').onclick = e => {
+    e.stopPropagation();
+    menu.replaceChildren();
+    const cur = Math.round(pctOf(view.z));
+    for (const [label, p] of [['Fit', null], ...[25, 50, 100, 200, 400].map(p => [p + '%', p])]) {
+      menu.append(h('button', { type: 'button', 'aria-current': String(p === null ? atFit() : cur === p),
+        onclick: () => { menu.classList.remove('on'); p === null ? fitView() : zoomToPct(p); } }, label));
+    }
+    menu.classList.toggle('on');
+  };
+  addEventListener('pointerdown', e => { if (!zoomBar.contains(e.target)) menu.classList.remove('on'); });
+  zq('in').onclick = () => zoomStep(1);
+  zq('out').onclick = () => zoomStep(-1);
+  zq('fit').onclick = fitView;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   history + persistence
+   ════════════════════════════════════════════════════════════════════ */
+const hist = { undo: [], redo: [] };
+const cloneLayers = ls => ls.map(L => ({ ...L, params: { ...L.params }, strokes: L.strokes.slice() }));
+const snapshot = () => ({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: doc.bgImage, active: doc.active, layers: cloneLayers(doc.layers) });
+function commit(snap) {
+  hist.undo.push(snap); if (hist.undo.length > 150) hist.undo.shift();
+  hist.redo.length = 0; updUndo(); save();
+}
+function mutate(fn) { const s = snapshot(); fn(); commit(s); }
+let editSnap = null;
+const beginEdit = () => { if (!editSnap) editSnap = snapshot(); };
+const endEdit = () => { if (editSnap) { commit(editSnap); editSnap = null; } };
+function restore(s) {
+  const sized = s.w !== doc.w || s.h !== doc.h;
+  doc = { w: s.w, h: s.h, bg: s.bg, bgImage: s.bgImage, active: s.active, layers: cloneLayers(s.layers) };
+  gcTargets();
+  for (const L of doc.layers) dirty.add(L.id);
+  if (sized) { view.z = 1; fit(); updateResolution(); }
+  const L = activeLayer();
+  if (L) { ui.brush = L.brush; if (ui.tool !== 'erase') ui.tool = L.brush; }
+  afterChange();
+}
+function undo() { if (drawing) return; const s = hist.undo.pop(); if (!s) return; hist.redo.push(snapshot()); restore(s); updUndo(); save(); }
+function redo() { if (drawing) return; const s = hist.redo.pop(); if (!s) return; hist.undo.push(snapshot()); restore(s); updUndo(); save(); }
+function updUndo() { $('#undo').disabled = !hist.undo.length; $('#redo').disabled = !hist.redo.length; }
+
+const KEY = 'slip-metal.v3';
+let saveT = 0, saveWarned = false;
+const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000;
+function packPts(p) { const o = new Array(p.length); for (let i = 0; i < p.length; i += 5) { o[i] = r1(p[i]); o[i + 1] = r1(p[i + 1]); o[i + 2] = r3(p[i + 2]); o[i + 3] = Math.round(p[i + 3]); o[i + 4] = Math.round(p[i + 4] * 100) / 100; } return o; }
+function save() {
+  if (/[?&]lab=/.test(location.search)) return;
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        v: 1, w: doc.w, h: doc.h, bg: doc.bg, active: doc.active, last: lastParams,
+        ui: { tool: ui.tool, brush: ui.brush, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') },
+        layers: doc.layers.map(L => ({ id: L.id, brush: L.brush, name: L.name, visible: L.visible, seed: L.seed, params: L.params,
+          strokes: L.strokes.map(s => ({ ...s, pts: packPts(s.pts) })) })),
+      }));
+    } catch (e) { if (!saveWarned) { saveWarned = true; toast('Too large to autosave in this browser'); } }
+  }, 600);
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (!d || d.v !== 1 || !Array.isArray(d.layers)) return false;
+    doc = { w: d.w, h: d.h, bg: d.bg, bgImage: null, active: d.active,
+      layers: d.layers.map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) };
+    if (d.last) for (const b of ['slip', 'metal']) Object.assign(lastParams[b], d.last[b] || {});
+    if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
+    if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
+    if (!activeLayer() && doc.layers.length) doc.active = doc.layers[doc.layers.length - 1].id;
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   input: pen, mouse, finger, Force Touch
+   ════════════════════════════════════════════════════════════════════ */
+let drawing = null, gesture = null, panDrag = null, tapInfo = null;
+let penSeen = false, spaceDown = false, forceP = -1;
+const touches = new Map();
+const ring = $('#ring');
+const isTouchUI = matchMedia('(pointer:coarse)').matches;
+
+// Safari on a Force Touch trackpad reports real press force on mouse events. Claim it before macOS turns it into Look Up.
+board.addEventListener('webkitmouseforcewillbegin', e => e.preventDefault());
+board.addEventListener('webkitmouseforcedown', e => e.preventDefault());
+board.addEventListener('webkitmouseforcechanged', e => { forceP = clamp((e.webkitForce - 1) / 2, 0, 1); });
+board.addEventListener('mouseup', () => { forceP = forceP >= 0 ? 0 : -1; });
+document.addEventListener('gesturestart', e => e.preventDefault());
+stage.addEventListener('contextmenu', e => e.preventDefault());
+
+function docPoint(ev, rect) { return [(ev.clientX - rect.left) / rect.width * doc.w, (ev.clientY - rect.top) / rect.height * doc.h]; }
+function pushSample(ev) {
+  const [x, y] = docPoint(ev, drawing.rect);
+  let p = .5, al = 1;
+  if (ev.pointerType === 'pen') {
+    p = ev.pressure;
+    if (typeof ev.altitudeAngle === 'number') al = ev.altitudeAngle / (Math.PI / 2);
+    else if (ev.tiltX || ev.tiltY) {
+      const tx = Math.tan(ev.tiltX * Math.PI / 180), ty = Math.tan(ev.tiltY * Math.PI / 180);
+      al = (Math.PI / 2 - Math.atan(Math.hypot(tx, ty))) / (Math.PI / 2);
+    }
+  } else if (ev.pointerType === 'mouse') {
+    if (forceP >= 0) p = .42 + .58 * forceP;
+    else if (ev.pressure > 0 && ev.pressure !== .5) p = ev.pressure;
+  }
+  drawing.st.pts.push(x, y, p, Math.max(0, ev.timeStamp - drawing.t0), clamp(al, 0, 1));
+  if (drawing.st.hasP) liveP = { kind: ev.pointerType === 'pen' ? 'pen' : 'force', p, tilt: ev.pointerType === 'pen' ? Math.round(90 - al * 90) : null };
+}
+function addSamples(e) {
+  const list = (e.getCoalescedEvents && e.getCoalescedEvents()) || [];
+  for (const ev of (list.length ? list : [e])) pushSample(ev);
+  drawing.lastMove = performance.now();
+}
+function startStroke(e) {
+  const snap = snapshot();
+  let L = activeLayer();
+  if (!L) { L = newLayer(ui.brush); doc.layers.push(L); doc.active = L.id; renderLayers(); }
+  if (!L.visible) { L.visible = true; renderLayers(); toast(`${L.name} shown`); }
+  const erase = ui.tool === 'erase';
+  const hasP = e.pointerType === 'pen' || (e.pointerType === 'mouse' && (forceP >= 0 || (e.pressure > 0 && e.pressure !== .5)));
+  const st = { id: uid(), seed: Math.random() * 1000, sym: ui.sym, erase, hasP, hasT: e.pointerType === 'pen', pts: [] };
+  if (erase) st.size = ui.eraser;
+  drawing = { id: e.pointerId, L, st, snap, t0: e.timeStamp, lastMove: performance.now(), rect: board.getBoundingClientRect(), touch: e.pointerType === 'touch' };
+  addSamples(e);
+  $('#empty').classList.add('off');
+  request();
+}
+function endStroke() {
+  const { L, st, snap } = drawing;
+  drawing = null;
+  if (!st.pts.length || (st.erase && !L.strokes.length)) { request(); return; }
+  L.strokes.push(st);
+  commitStroke(L, st);
+  commit(snap);
+  renderLayers();
+  request();
+}
+function cancelStroke() { drawing = null; request(); }
+
+const centroid = ps => [ps.reduce((s, p) => s + p.x, 0) / ps.length, ps.reduce((s, p) => s + p.y, 0) / ps.length];
+const spread = ps => ps.length < 2 ? 1 : Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y);
+function startGesture() {
+  const ps = [...touches.values()];
+  gesture = { n: ps.length, z0: view.z, x0: view.x, y0: view.y, c0: centroid(ps), d0: spread(ps), C: untransformedCentre() };
+}
+function updateGesture() {
+  const ps = [...touches.values()];
+  if (ps.length !== gesture.n) { startGesture(); return; }
+  const c = centroid(ps);
+  const z = gesture.n >= 2 ? clamp(gesture.z0 * spread(ps) / Math.max(gesture.d0, 1), Math.min(1, zOfPct(5)), zOfPct(3200)) : gesture.z0;
+  const qx = (gesture.c0[0] - gesture.C[0] - gesture.x0) / gesture.z0, qy = (gesture.c0[1] - gesture.C[1] - gesture.y0) / gesture.z0;
+  view.z = z; view.x = c[0] - gesture.C[0] - z * qx; view.y = c[1] - gesture.C[1] - z * qy;
+  applyView();
+}
+
+stage.addEventListener('pointerdown', e => {
+  if (stage.setPointerCapture) try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  ring.classList.remove('on');
+  if (e.pointerType === 'touch') {
+    e.preventDefault();
+    if (drawing && !drawing.touch) return;                         // palm on glass while the Pencil draws
+    if (penSeen && (e.width > 44 || e.height > 44)) return;        // broad contact = palm, not a finger
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
+    if (touches.size === 1) tapInfo = { t0: e.timeStamp, max: 1, moved: 0 };
+    else if (tapInfo) tapInfo.max = Math.max(tapInfo.max, touches.size);
+    if (touches.size >= 2 || penSeen) {
+      if (drawing && drawing.touch) cancelStroke();
+      startGesture(); return;
+    }
+    if (!drawing) startStroke(e);
+    return;
+  }
+  if (drawing) return;
+  if ((e.pointerType === 'mouse' && e.button === 1) || spaceDown) {
+    e.preventDefault();
+    panDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+    board.classList.add('grab');
+    return;
+  }
+  if (e.button !== 0) return;
+  if (e.pointerType === 'pen') { penSeen = true; touches.clear(); gesture = null; tapInfo = null; }
+  startStroke(e);
+});
+stage.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+    const t = touches.get(e.pointerId);
+    t.x = e.clientX; t.y = e.clientY;
+    if (tapInfo) tapInfo.moved = Math.max(tapInfo.moved, Math.hypot(t.x - t.sx, t.y - t.sy));
+    if (gesture) { updateGesture(); return; }
+  }
+  if (panDrag && panDrag.id === e.pointerId) {
+    view.x = panDrag.vx + e.clientX - panDrag.x; view.y = panDrag.vy + e.clientY - panDrag.y; applyView(); return;
+  }
+  if (drawing && drawing.id === e.pointerId) { addSamples(e); request(); }
+  if (e.pointerType !== 'touch') moveRing(e);
+});
+function pointerEnd(e) {
+  if (e.pointerType === 'touch') {
+    touches.delete(e.pointerId);
+    if (touches.size === 0) {
+      if (tapInfo && tapInfo.max >= 2 && e.timeStamp - tapInfo.t0 < 320 && tapInfo.moved < 12) {
+        if (tapInfo.max === 2) { undo(); toast('Undo'); } else { redo(); toast('Redo'); }
+      }
+      tapInfo = null; gesture = null;
+    } else if (gesture) startGesture();
+  }
+  if (panDrag && panDrag.id === e.pointerId) { panDrag = null; board.classList.remove('grab'); }
+  if (drawing && drawing.id === e.pointerId) { if (e.type === 'pointercancel') cancelStroke(); else endStroke(); }
+}
+stage.addEventListener('pointerup', pointerEnd);
+stage.addEventListener('pointercancel', pointerEnd);
+stage.addEventListener('pointerleave', e => { if (!drawing) ring.classList.remove('on'); });
+function moveRing(e) {
+  if (spaceDown || panDrag) { ring.classList.remove('on'); return; }
+  const r = board.getBoundingClientRect();
+  const L = activeLayer();
+  const size = ui.tool === 'erase' ? ui.eraser : (L ? L.params.size : lastParams[ui.brush].size);
+  const d = Math.max(4, size * r.width / doc.w);
+  ring.style.width = ring.style.height = d + 'px';
+  ring.style.transform = `translate(${e.clientX - d / 2}px, ${e.clientY - d / 2}px)`;
+  ring.classList.toggle('erase', ui.tool === 'erase');
+  ring.classList.add('on');
+  board.classList.add('nocursor');
+}
+
+addEventListener('keydown', e => {
+  if (e.target instanceof Element && e.target.matches('input[type=text], textarea, [contenteditable]')) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (mod || e.altKey) return;
+  if (e.key === ' ') { e.preventDefault(); if (!spaceDown) { spaceDown = true; board.classList.add('grab'); ring.classList.remove('on'); } return; }
+  const k = e.key.toLowerCase();
+  if (k === '[' || k === ']') {
+    const f = k === ']' ? 1.15 : 1 / 1.15;
+    if (ui.tool === 'erase') ui.eraser = clamp(Math.round(ui.eraser * f), 4, 240);
+    else { const L = activeLayer(); if (L) setParam(L, 'size', clamp(Math.round(L.params.size * f), 2, 140)); }
+    refreshControls(); return;
+  }
+  if (k === 'b') setTool(ui.tool === 'slip' ? 'metal' : ui.tool === 'metal' ? 'slip' : ui.brush);
+  else if (k === 'e') setTool(ui.tool === 'erase' ? ui.brush : 'erase');
+  else if (k === 's') togglePanel();
+  else if (k === 'escape') togglePanel(false);
+  else if (k === '0') fitView();
+  else if (k === '1') zoomToPct(100);
+  else if (k === '=' || k === '+') zoomStep(1);
+  else if (k === '-') zoomStep(-1);
+});
+addEventListener('keyup', e => { if (e.key === ' ') { spaceDown = false; board.classList.remove('grab'); } });
+addEventListener('blur', () => { spaceDown = false; board.classList.remove('grab'); });
+
+/* ════════════════════════════════════════════════════════════════════
+   UI
+   ════════════════════════════════════════════════════════════════════ */
+const panel = $('#panel'), pbody = $('#pbody');
+const pane = n => $(`[data-pane="${n}"]`, pbody);
+const toastEl = $('#toast');
+let toastT = 0;
+function toast(msg, action) {
+  toastEl.replaceChildren(h('span', null, msg));
+  if (action) toastEl.append(h('button', { type: 'button', onclick: () => { action.fn(); toastEl.classList.remove('on'); } }, action.label));
+  toastEl.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('on'), action ? 4000 : 1800);
+}
+function togglePanel(force) {
+  const open = force ?? panel.hasAttribute('hidden-state');
+  panel.toggleAttribute('hidden-state', !open);
+  if (open) requestAnimationFrame(refreshSegs);
+  save();
+}
+$('#btnPanel').onclick = () => togglePanel();
+$('#closePanel').onclick = () => togglePanel(false);
+$$('.tab').forEach(t => t.onclick = () => showTab(t.dataset.tab));
+function showTab(name) {
+  ui.tab = name;
+  $$('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
+  $$('.pane', pbody).forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+  pbody.scrollTop = 0;
+  requestAnimationFrame(refreshSegs);
+  save();
+}
+
+function ballCss(L) {
+  const P = L ? L.params : null;
+  if (!P) return '';
+  if (L.brush === 'metal') {
+    return `radial-gradient(circle at 34% 30%, ${P.c2} 0 12%, ${P.c1} 38%, ${P.c0} 72%, ${P.c1} 100%)`;
+  }
+  const c = hexRgb(P.color), lo = toHex(c.map(v => v * .62)), hi = toHex(mix3(c, [1, 1, 1], .55));
+  return `radial-gradient(circle at 34% 30%, #fff 0 7%, ${hi} 16%, ${P.color} 46%, ${lo} 100%)`;
+}
+function presetBall(brush, pr) {
+  if (brush === 'metal') return `radial-gradient(circle at 34% 30%, ${pr.c2} 0 12%, ${pr.c1} 38%, ${pr.c0} 72%, ${pr.c1} 100%)`;
+  const c = hexRgb(pr.color), lo = toHex(c.map(v => v * .62)), hi = toHex(mix3(c, [1, 1, 1], .55));
+  return `radial-gradient(circle at 34% 30%, #fff 0 7%, ${hi} 16%, ${pr.color} 46%, ${lo} 100%)`;
+}
+function updateBalls() {
+  for (const b of ['slip', 'metal']) {
+    const L = [...doc.layers].reverse().find(l => l.brush === b && l.id === doc.active) || [...doc.layers].reverse().find(l => l.brush === b);
+    $(b === 'slip' ? '#ballSlip' : '#ballMetal').style.background = ballCss(L || { brush: b, params: lastParams[b] });
+  }
+}
+function updatePill() {
+  const tools = $('#tools');
+  let sel = null;
+  $$('button', tools).forEach(b => { const on = b.dataset.tool === ui.tool; b.setAttribute('aria-pressed', String(on)); if (on) sel = b; });
+  if (sel && sel.offsetWidth) placeThumb($('.thumb', tools), sel);
+  updateBalls();
+}
+// glide the selection thumb; the very first placement lands without motion
+function placeThumb(th, target) {
+  const first = !th._placed;
+  if (first) th.style.transition = 'none';
+  th.style.width = target.offsetWidth + 'px';
+  th.style.transform = `translateX(${target.offsetLeft}px)`;
+  if (first) { th.offsetWidth; th.style.transition = ''; th._placed = true; }
+}
+$$('#tools button').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+$('#undo').onclick = undo;
+$('#redo').onclick = redo;
+
+function setTool(t) {
+  if (t === 'erase') { ui.tool = 'erase'; }
+  else {
+    ui.tool = t; ui.brush = t;
+    const L = activeLayer();
+    if (!L || L.brush !== t) {
+      if (L && !L.strokes.length) {
+        mutate(() => { L.brush = t; L.params = { ...lastParams[t] }; L.name = newLayer(t).name; });
+      } else {
+        const top = doc.layers[doc.layers.length - 1];
+        if (top && top.brush === t) doc.active = top.id;
+        else mutate(() => { const nl = newLayer(t); doc.layers.push(nl); doc.active = nl.id; });
+      }
+      dirty.add(doc.active);
+    }
+  }
+  afterChange();
+}
+function setParam(L, k, v) {
+  L.params[k] = v;
+  lastParams[L.brush][k] = v;
+  if (GEOM.has(k)) dirty.add(L.id);
+  request();
+}
+function afterChange() {
+  renderPanel(); updatePill(); updateGuides(); updateEmpty(); request(); save();
+}
+function updateEmpty() { $('#empty').classList.toggle('off', doc.layers.some(L => L.strokes.length)); }
+
+const sec = t => h('div', { class: 'sec' }, t);
+const hint = html => h('div', { class: 'hint', html });
+const fmtNum = (v, step, suf = '') => (step >= 1 ? Math.round(v) : v.toFixed(2)) + suf;
+
+function slider(o) {
+  const inp = h('input', { type: 'range', min: o.min, max: o.max, step: o.step, 'aria-label': o.label });
+  const b = h('b');
+  const row = h('div', { class: 'ctrl' }, h('span', null, o.label), b, inp);
+  const upd = () => {
+    const v = o.get();
+    inp.value = v; b.textContent = fmtNum(v, o.step, o.suf);
+    row.style.setProperty('--fill', clamp((v - o.min) / (o.max - o.min), 0, 1) * 100 + '%');
+  };
+  const setX = cx => {
+    const r = row.getBoundingClientRect();
+    let v = o.min + clamp((cx - r.left) / r.width, 0, 1) * (o.max - o.min);
+    v = +(Math.round(v / o.step) * o.step).toFixed(4);
+    if (v !== o.get()) { o.set(v); upd(); }
+  };
+  let drag = null;
+  row.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, on: e.pointerType !== 'touch' };
+    if (drag.on) { beginEdit(); row.setPointerCapture(e.pointerId); row.classList.add('on'); setX(e.clientX); }
+  });
+  row.addEventListener('pointermove', e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    if (!drag.on) {
+      const dx = Math.abs(e.clientX - drag.x), dy = Math.abs(e.clientY - drag.y);
+      if (dy > 8 && dy > dx) { drag = null; return; }
+      if (dx < 6) return;
+      drag.on = true; beginEdit(); row.setPointerCapture(e.pointerId); row.classList.add('on');
+    }
+    setX(e.clientX);
+  });
+  row.addEventListener('pointerup', e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    if (!drag.on) { beginEdit(); setX(e.clientX); }
+    drag = null; row.classList.remove('on'); endEdit();
+  });
+  row.addEventListener('pointercancel', () => { drag = null; row.classList.remove('on'); endEdit(); });
+  inp.addEventListener('input', () => { beginEdit(); o.set(+inp.value); upd(); });
+  inp.addEventListener('change', endEdit);
+  row._upd = upd; upd();
+  return row;
+}
+function seg(options, get, set) {
+  const el = h('div', { class: 'seg' }, h('i', { class: 'thumb' }));
+  for (const [v, label, title] of options) {
+    el.append(h('button', { type: 'button', 'data-v': v, title: title || null, html: label, onclick: () => { set(v); upd(); } }));
+  }
+  const upd = () => {
+    const cur = String(get());
+    let s = null;
+    $$('button', el).forEach(b => { const on = b.dataset.v === cur; b.setAttribute('aria-pressed', String(on)); if (on) s = b; });
+    if (s && s.offsetWidth) placeThumb($('.thumb', el), s);
+  };
+  el._upd = upd; el.classList.add('segctl');
+  return el;
+}
+function refreshSegs() { $$('.segctl').forEach(s => s._upd()); updatePill(); }
+function refreshControls() { $$('.ctrl, .row.color').forEach(c => c._upd && c._upd()); refreshSegs(); }
+function colorRow(label, get, set) {
+  const ci = h('input', { type: 'color', 'aria-label': label });
+  const sw = h('label', { class: 'swatch' }, ci);
+  const hx = h('input', { type: 'text', class: 'hex', spellcheck: 'false', maxlength: '7', 'aria-label': label + ' hex' });
+  const row = h('div', { class: 'row color' }, h('span', { class: 'lab' }, label), sw, hx);
+  const upd = () => { const v = get(); ci.value = v.toLowerCase(); hx.value = v.toUpperCase(); sw.style.background = v; };
+  ci.addEventListener('input', () => { beginEdit(); set(ci.value.toUpperCase()); upd(); });
+  ci.addEventListener('change', endEdit);
+  hx.addEventListener('change', () => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hx.value.trim());
+    if (m) { beginEdit(); set('#' + m[1].toUpperCase()); endEdit(); }
+    upd();
+  });
+  hx.addEventListener('keydown', e => { if (e.key === 'Enter') hx.blur(); });
+  row._upd = upd; upd();
+  return row;
+}
+function toggleRow(label, get, set) {
+  const id = 'tg-' + label.toLowerCase().replace(/\W+/g, '-');
+  const cb = h('input', { type: 'checkbox', id });
+  cb.checked = get();
+  cb.onchange = () => { set(cb.checked); save(); };
+  return h('div', { class: 'row tog' }, cb, h('label', { for: id }, label));
+}
+
+const SYM_ICONS = {
+  off: 'Off',
+  x: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M8 8l-3 4 3 4M16 8l3 4-3 4"/></svg>',
+  y: '<svg class="i" viewBox="0 0 24 24"><path d="M3 12h18" stroke-dasharray="2 2.5"/><path d="M8 8l4-3 4 3M8 16l4 3 4-3"/></svg>',
+  xy: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke-dasharray="2 2.5"/><circle cx="7.5" cy="7.5" r="1.3"/><circle cx="16.5" cy="7.5" r="1.3"/><circle cx="7.5" cy="16.5" r="1.3"/><circle cx="16.5" cy="16.5" r="1.3"/></svg>',
+  r6: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.2"/><path d="M12 4v4M12 16v4M5.1 8l3.4 2M15.5 14l3.4 2M5.1 16l3.4-2M15.5 10l3.4-2"/></svg>',
+};
+
+function renderPanel() {
+  const L = activeLayer();
+  const brush = L ? L.brush : ui.brush;
+  const P = L ? L.params : lastParams[brush];
+  const set = (k) => v => { if (L) setParam(L, k, v); else { lastParams[brush][k] = v; } if (!GEOM.has(k) && L) { L.params.preset = null; markPresets(); } updateBalls(); };
+  const ps = d => slider({ label: d[1], min: d[2], max: d[3], step: d[4], suf: d[5], get: () => (L ? L.params : lastParams[brush])[d[0]], set: set(d[0]) });
+
+  // Brush
+  const bp = pane('brush'); bp.replaceChildren();
+  if (ui.tool === 'erase') {
+    bp.append(sec('Eraser'),
+      slider({ label: 'Size', min: 4, max: 240, step: 1, get: () => ui.eraser, set: v => { ui.eraser = v; save(); } }),
+      hint(`Cuts ${L ? L.name : 'the active layer'}. The cut edge stays rounded.`));
+  }
+  bp.append(sec(`${NAMES[brush]} stroke`),
+    ...[['size', 'Size', 2, 140, 1], ['pressure', 'Pressure', 0, 1, .01], ['speed', 'Speed', 0, 1, .01], ['tilt', 'Tilt', 0, 1, .01]].map(ps),
+    sec('Flow'),
+    ...[['merge', 'Merge', 0, 1, .01], ['pool', 'Pooling', 0, 2, .01], ['vary', 'Wobble', 0, 1, .01], ['smooth', 'Smoothing', 0, 1, .01]].map(ps),
+  );
+  const taper = ps(['taper', 'Taper', .2, 3, .01]);
+  taper.hidden = P.end !== 'wedge';
+  bp.append(sec('Ends'),
+    seg([['drop', 'Drop'], ['wedge', 'Wedge']], () => (L ? L.params : lastParams[brush]).end, v => { beginEdit(); set('end')(v); endEdit(); taper.hidden = v !== 'wedge'; }),
+    taper);
+  bp.append(sec('Mirror'),
+    seg(Object.keys(SYM_ICONS).map(k => [k, SYM_ICONS[k], { off: 'No mirror', x: 'Left / right', y: 'Top / bottom', xy: 'Four quarters', r6: 'Six-way radial' }[k]]),
+      () => ui.sym, v => { ui.sym = v; updateGuides(); save(); }),
+    hint('Pressure comes from Apple Pencil and drawing tablets, and from a Force Touch trackpad in Safari. A mouse has no pressure sensor, so speed and pauses do the work: slow down to swell, hold still to pool.'));
+
+  // Surface
+  const sp = pane('surface'); sp.replaceChildren();
+  const presets = brush === 'metal' ? METAL_PRESETS : SLIP_PRESETS;
+  const mats = h('div', { class: 'mats' });
+  for (const pr of presets) {
+    mats.append(h('button', { type: 'button', class: 'mat', 'data-name': pr.name, onclick: () => {
+      if (!L) return;
+      mutate(() => { const { name, ...vals } = pr; Object.assign(L.params, vals, { preset: name }); Object.assign(lastParams[brush], vals, { preset: name }); });
+      request(); renderPanel(); updateBalls();
+    } }, h('span', { class: 'ball', style: `background:${presetBall(brush, pr)}` }), h('span', null, pr.name)));
+  }
+  sp.append(sec('Material'), mats);
+  if (brush === 'metal') {
+    sp.append(sec('Palette'),
+      colorRow('Shadow', () => P.c0, set('c0')), colorRow('Midtone', () => P.c1, set('c1')), colorRow('Highlight', () => P.c2, set('c2')),
+      sec('Reflection'),
+      ...[['sky', 'Top', 0, 1, .01], ['rim', 'Edge tone', 0, 1, .01], ['contrast', 'Contrast', .4, 2, .01], ['brk', 'Banding', 0, 1, .01]].map(ps),
+      sec('Finish'),
+      ...[['shine', 'Shine', 0, 2, .01], ['grain', 'Grain', 0, 1, .01], ['rough', 'Ripple', 0, 1, .01], ['iri', 'Iridescence', 0, 1, .01]].map(ps));
+  } else {
+    sp.append(sec('Colour'), colorRow('Glaze', () => P.color, set('color')),
+      sec('Finish'),
+      ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01], ['brk', 'Break', 0, 1, .01], ['speckle', 'Speckle', 0, 1, .01], ['grain', 'Grain', 0, 1, .01]].map(ps));
+  }
+  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, 80, 1]].map(ps),
+    sec('Light'), ...[['light', 'Light', 0, 360, 1, '°'], ['shadow', 'Shadow', 0, 1, .01]].map(ps));
+  markPresets();
+
+  // Canvas
+  const cp = pane('canvas'); cp.replaceChildren();
+  cp.append(sec('Layers'), h('div', { class: 'layers', id: 'layers' }),
+    h('div', { class: 'btnrow' },
+      h('button', { type: 'button', class: 'btn', onclick: () => { mutate(() => { const nl = newLayer(ui.brush); doc.layers.push(nl); doc.active = nl.id; }); if (ui.tool === 'erase') ui.tool = ui.brush; afterChange(); } }, `New ${NAMES[ui.brush].toLowerCase()} layer`)));
+  cp.append(sec('Artboard'),
+    seg(BOARDS.map(b => [b[0], b[0]]), () => (BOARDS.find(b => b[1] === doc.w && b[2] === doc.h) || [''])[0], v => {
+      const b = BOARDS.find(x => x[0] === v);
+      mutate(() => { resizeDoc(b[1], b[2]); doc.bgImage = null; });
+      afterChange();
+    }));
+  const bgs = h('div', { class: 'bgs' });
+  for (const [name, val] of BGS) {
+    bgs.append(h('button', { type: 'button', title: name, class: val === 'none' ? 'clr' : null, style: val === 'none' ? null : `background:${val}`,
+      'aria-pressed': String(doc.bg === val && !doc.bgImage), onclick: () => { mutate(() => { doc.bg = val; doc.bgImage = null; }); afterChange(); } }));
+  }
+  cp.append(sec('Background'), bgs);
+  if (doc.bg !== 'none') cp.append(colorRow('Colour', () => doc.bg, v => { doc.bg = v; doc.bgImage = null; markBgs(); request(); }));
+  cp.append(h('div', { class: 'btnrow' },
+    h('button', { type: 'button', class: 'btn', onclick: () => $('#file').click() }, doc.bgImage ? 'Replace image' : 'Draw on an image'),
+    doc.bgImage ? h('button', { type: 'button', class: 'btn', onclick: () => { mutate(() => { doc.bgImage = null; }); afterChange(); } }, 'Remove image') : null));
+  cp.append(sec('Export'),
+    seg([['1', '1×'], ['2', '2×'], ['3', '3×'], ['4', '4×']], () => ui.exp.scale, v => { ui.exp.scale = +v; save(); }),
+    toggleRow('Transparent background', () => ui.exp.transparent, v => ui.exp.transparent = v),
+    toggleRow('Crop to drawing', () => ui.exp.crop, v => ui.exp.crop = v),
+    h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn primary', onclick: exportPNG }, 'Export PNG')),
+    sec('Reset'),
+    h('div', { class: 'btnrow' },
+      h('button', { type: 'button', class: 'btn quiet', onclick: clearLayer }, 'Clear layer'),
+      h('button', { type: 'button', class: 'btn quiet', onclick: clearAll }, 'Clear all')),
+    hint(isTouchUI
+      ? 'Two-finger tap to undo, three-finger tap to redo. Pinch to zoom. Once a Pencil touches the screen, fingers only navigate.'
+      : '<kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>[</kbd> <kbd>]</kbd> size · <kbd>B</kbd> slip/metal · <kbd>E</kbd> eraser · hold <kbd>Space</kbd> to pan · <kbd>⌘</kbd>+scroll to zoom · <kbd>S</kbd> panel'));
+  renderLayers();
+  showTab(ui.tab);
+}
+function markPresets() {
+  const L = activeLayer();
+  $$('.mat').forEach(b => b.setAttribute('aria-pressed', String(!!L && L.params.preset === b.dataset.name)));
+}
+function markBgs() { $$('.bgs button').forEach((b, i) => b.setAttribute('aria-pressed', String(BGS[i][1] === doc.bg && !doc.bgImage))); }
+
+function renderLayers() {
+  const box = $('#layers');
+  if (!box) return;
+  box.replaceChildren();
+  if (!doc.layers.length) { box.append(hint('No layers yet. Your first stroke makes one.')); return; }
+  for (let i = doc.layers.length - 1; i >= 0; i--) {
+    const L = doc.layers[i];
+    const btn = (icon, title, fn) => h('button', { type: 'button', title, html: icon, onclick: e => { e.stopPropagation(); fn(); } });
+    const row = h('div', { class: 'lrow' + (L.visible ? '' : ' hid'), 'aria-current': String(L.id === doc.active), role: 'button', tabindex: '0',
+      onclick: () => selectLayer(L.id) },
+      h('span', { class: 'ball', style: `background:${ballCss(L)}` }),
+      h('span', { class: 'nm' }, L.name),
+      h('small', null, L.strokes.length ? String(L.strokes.length) : 'empty'),
+      h('span', { class: 'acts' },
+        btn(L.visible ? ICON.eye : ICON.eyeOff, L.visible ? 'Hide' : 'Show', () => { mutate(() => { L.visible = !L.visible; }); renderLayers(); request(); }),
+        i < doc.layers.length - 1 ? btn(ICON.up, 'Move up', () => moveLayer(i, 1)) : null,
+        i > 0 ? btn(ICON.down, 'Move down', () => moveLayer(i, -1)) : null,
+        btn(ICON.del, 'Delete layer', () => deleteLayer(L.id))));
+    box.append(row);
+  }
+}
+function selectLayer(id) {
+  doc.active = id;
+  const L = activeLayer();
+  ui.brush = L.brush;
+  if (ui.tool !== 'erase') ui.tool = L.brush;
+  afterChange();
+}
+function moveLayer(i, d) {
+  mutate(() => { const ls = doc.layers; [ls[i], ls[i + d]] = [ls[i + d], ls[i]]; });
+  renderLayers(); request();
+}
+function deleteLayer(id) {
+  const L = layerById(id);
+  mutate(() => {
+    doc.layers = doc.layers.filter(l => l.id !== id);
+    if (doc.active === id) doc.active = doc.layers.length ? doc.layers[doc.layers.length - 1].id : null;
+  });
+  gcTargets(); afterChange();
+  toast(`${L.name} deleted`, { label: 'Undo', fn: undo });
+}
+function clearLayer() {
+  const L = activeLayer();
+  if (!L || !L.strokes.length) return;
+  mutate(() => { L.strokes = []; });
+  dirty.add(L.id); afterChange();
+  toast(`${L.name} cleared`, { label: 'Undo', fn: undo });
+}
+function clearAll() {
+  if (!doc.layers.some(L => L.strokes.length)) return;
+  mutate(() => { const nl = newLayer(ui.brush); nl.name = NAMES[ui.brush]; doc.layers = [nl]; doc.active = nl.id; });
+  gcTargets(); afterChange();
+  toast('Canvas cleared', { label: 'Undo', fn: undo });
+}
+function resizeDoc(w, hgt) {
+  const dx = (w - doc.w) / 2, dy = (hgt - doc.h) / 2;
+  if (dx || dy) {
+    for (const L of doc.layers) {
+      L.strokes = L.strokes.map(s => { const p = s.pts.slice(); for (let i = 0; i < p.length; i += 5) { p[i] += dx; p[i + 1] += dy; } return { ...s, pts: p }; });
+      dirty.add(L.id);
+    }
+  }
+  doc.w = w; doc.h = hgt;
+  view.z = 1; fit(); updateResolution();
+}
+function updateGuides() {
+  const g = $('#guides');
+  g.setAttribute('viewBox', `0 0 ${doc.w} ${doc.h}`);
+  board.classList.toggle('clear', doc.bg === 'none' && !doc.bgImage);
+  const cx = doc.w / 2, cy = doc.h / 2, R = Math.hypot(doc.w, doc.h);
+  const lines = [];
+  if (ui.sym === 'x' || ui.sym === 'xy') lines.push([cx, 0, cx, doc.h]);
+  if (ui.sym === 'y' || ui.sym === 'xy') lines.push([0, cy, doc.w, cy]);
+  if (ui.sym === 'r6') for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3 + Math.PI / 6; lines.push([cx - Math.cos(a) * R, cy - Math.sin(a) * R, cx + Math.cos(a) * R, cy + Math.sin(a) * R]); }
+  g.innerHTML = lines.map(l => `<line x1="${l[0]}" y1="${l[1]}" x2="${l[2]}" y2="${l[3]}"/>`).join('');
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   images in
+   ════════════════════════════════════════════════════════════════════ */
+function loadImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(200, Math.round(img.naturalWidth * k)), hgt = Math.max(200, Math.round(img.naturalHeight * k));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = hgt;
+    cv.getContext('2d').drawImage(img, 0, 0, w, hgt);
+    URL.revokeObjectURL(url);
+    mutate(() => { resizeDoc(w, hgt); doc.bgImage = cv; });
+    afterChange();
+    toast(`${w}×${hgt}`);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast("That image couldn't be read"); };
+  img.src = url;
+}
+$('#btnImage').onclick = () => $('#file').click();
+$('#file').onchange = e => { loadImageFile(e.target.files[0]); e.target.value = ''; };
+{
+  const veil = $('#veil'); let depth = 0;
+  addEventListener('dragenter', e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { depth++; veil.classList.add('on'); e.preventDefault(); } });
+  addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) veil.classList.remove('on'); });
+  addEventListener('dragover', e => e.preventDefault());
+  addEventListener('drop', e => { e.preventDefault(); depth = 0; veil.classList.remove('on'); loadImageFile(e.dataTransfer.files[0]); });
+  addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith('image/')); if (f) loadImageFile(f); });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   export: rebuild every layer at k× and composite off-screen
+   ════════════════════════════════════════════════════════════════════ */
+let exporting = false;
+async function exportPNG() {
+  if (exporting) return;
+  if (!doc.layers.some(L => L.visible && L.strokes.length)) { toast('Nothing to export yet'); return; }
+  exporting = true;
+  toast('Rendering…');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const lim = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), 8192);
+    let S = Math.min(ui.exp.scale, lim / doc.w, lim / doc.h);
+    const cap = isTouchUI ? 16e6 : 36e6;
+    if (doc.w * doc.h * S * S > cap) S = Math.sqrt(cap / (doc.w * doc.h));
+    const w = Math.round(doc.w * S), hgt = Math.round(doc.h * S);
+    S = w / doc.w;
+    const ctx = { field: makeTarget(w, hgt, FIELD), scratch: makeTarget(w, hgt, FIELD), erase: makeTarget(w, hgt, FIELD), minSig: .7 / S };
+    const out = makeTarget(w, hgt, FMT8);
+    const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+    drawBg(out, ui.exp.transparent);
+    for (const L of doc.layers) {
+      if (!L.visible || !L.strokes.length) continue;
+      const lb = [Infinity, Infinity, -Infinity, -Infinity];
+      buildLayer(L, ctx, lb);
+      const pad = (L.params.size * .24 + 3) * L.params.vol * 1.6 + 6;
+      bounds[0] = Math.min(bounds[0], lb[0] - pad); bounds[1] = Math.min(bounds[1], lb[1] - pad);
+      bounds[2] = Math.max(bounds[2], lb[2] + pad); bounds[3] = Math.max(bounds[3], lb[3] + pad);
+      drawLayer(L, ctx.field.tex, out, w, hgt);
+    }
+    let x0 = 0, y0 = 0, x1 = w, y1 = hgt;
+    if (ui.exp.crop && isFinite(bounds[0])) {
+      x0 = clamp(Math.floor(bounds[0] * S), 0, w); y0 = clamp(Math.floor(bounds[1] * S), 0, hgt);
+      x1 = clamp(Math.ceil(bounds[2] * S), 0, w); y1 = clamp(Math.ceil(bounds[3] * S), 0, hgt);
+    }
+    const cw = Math.max(1, x1 - x0), ch = Math.max(1, y1 - y0);
+    const px = new Uint8Array(cw * ch * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
+    gl.readPixels(x0, hgt - y1, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    [ctx.field, ctx.scratch, ctx.erase, out].forEach(freeTarget);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+    const c2 = cv.getContext('2d');
+    const id = c2.createImageData(cw, ch), d = id.data;
+    for (let y = 0; y < ch; y++) {
+      const src = (ch - 1 - y) * cw * 4, dst = y * cw * 4;
+      for (let x = 0; x < cw * 4; x += 4) {
+        const a = px[src + x + 3];
+        const k = a ? 255 / a : 0;
+        d[dst + x] = Math.min(255, px[src + x] * k); d[dst + x + 1] = Math.min(255, px[src + x + 1] * k);
+        d[dst + x + 2] = Math.min(255, px[src + x + 2] * k); d[dst + x + 3] = a;
+      }
+    }
+    c2.putImageData(id, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    const now = new Date(), pad = n => String(n).padStart(2, '0');
+    const name = `slip-metal-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
+    if (window.claude && window.claude.use) {          // inside a claude.ai artifact: the viewer owns saving
+      const dl = await window.claude.use('downloads');
+      if (!dl) { toast('Saving is not available in this view'); return; }
+      try { await dl.save({ filename: name, data: blob }); toast(`Saved PNG · ${cw}×${ch}`); }
+      catch (err) { toast(err && err.code === 'declined' ? 'Export cancelled' : 'Saving is not available in this view'); }
+      return;
+    }
+    const file = new File([blob], name, { type: 'image/png' });
+    let shared = false;
+    if (isTouchUI && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); shared = true; } catch (e) { shared = e && e.name === 'AbortError'; }
+    }
+    if (!shared) {
+      const url = URL.createObjectURL(blob);
+      const a = h('a', { href: url, download: name });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+    toast(`Saved PNG · ${cw}×${ch}`);
+  } catch (err) {
+    console.error(err);
+    toast('Export failed: ' + (err.message || err));
+  } finally {
+    exporting = false;
+    for (const L of doc.layers) dirty.add(L.id);   // targets were reused; make sure screen fields are intact
+    request();
+  }
+}
+$('#btnExport').onclick = exportPNG;
+
+/* ════════════════════════════════════════════════════════════════════
+   first-run sample: a few synthetic gestures so the tool opens showing what it does
+   ════════════════════════════════════════════════════════════════════ */
+function synth(path, { dur = 1600, speed = () => 1, pressure = () => .5, N = 700, hold = 0 } = {}) {
+  const P = [];
+  for (let i = 0; i <= N; i++) P.push(path(i / N));
+  const segT = [];
+  let tot = 0;
+  for (let i = 1; i <= N; i++) { const l = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]) / speed(i / N); segT.push(l); tot += l; }
+  const pts = [];
+  let t = 0;
+  for (let i = 0; i <= N; i++) {
+    if (i) t += segT[i - 1] / tot * dur;
+    pts.push(P[i][0], P[i][1], pressure(i / N), t, 1);
+  }
+  for (let k = 1; k <= hold; k++) pts.push(P[N][0], P[N][1], pressure(1), t + k * 16, 1);
+  return { id: uid(), seed: Math.random() * 1000, sym: 'off', erase: false, hasP: true, hasT: false, pts };
+}
+function seedDemo() {
+  doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
+  const slip = newLayer('slip');
+  slip.strokes.push(synth(u => {
+    const a = u * Math.PI * 2 * 3.3;
+    return [250 + 1080 * u - 120 * Math.sin(a), 690 + 190 * Math.cos(a) * (1 - .25 * u) - 120 * Math.sin(u * Math.PI)];
+  }, { dur: 2300, speed: u => .55 + .9 * Math.abs(Math.sin(u * Math.PI * 2 * 3.3 + .4)), pressure: u => .35 + .35 * Math.sin(u * Math.PI) }));
+  slip.strokes.push(synth(u => [292 + u * .5, 360 + u * .5], { dur: 60, N: 4, hold: 40, pressure: () => .5 }));
+  const metal = newLayer('metal');
+  metal.strokes.push(synth(u => {
+    const x = 340 + 980 * u;
+    return [x, 300 + 150 * Math.sin(u * Math.PI * 1.6 + .3) + 60 * Math.sin(u * Math.PI * 5)];
+  }, { dur: 1500, speed: u => .5 + 1.1 * Math.abs(Math.cos(u * Math.PI * 5)), pressure: u => .3 + .45 * Math.sin(u * Math.PI) }));
+  metal.strokes.push(synth(u => {
+    const a = u * Math.PI * 2 * 1.15;
+    return [1180 + 150 * Math.cos(a) * (1 - .45 * u), 930 + 120 * Math.sin(a) * (1 - .45 * u)];
+  }, { dur: 1100, speed: u => .6 + .6 * u, pressure: u => .5 + .3 * Math.sin(u * Math.PI) }));
+  doc.layers.push(slip, metal);
+  doc.active = metal.id;
+  ui.tool = ui.brush = 'metal';
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   boot
+   ════════════════════════════════════════════════════════════════════ */
+if (!load()) seedDemo();
+const L0 = activeLayer();
+if (L0) { ui.brush = L0.brush; if (ui.tool !== 'erase') ui.tool = L0.brush; }
+updUndo();
+fit();
+updateResolution();
+renderPanel();
+afterChange();
+if (document.fonts) document.fonts.ready.then(refreshSegs);
+window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, T, view, applyView, zoomToPct, dirty, renderPanel,
+  stamps(st, P) { const b = new FBuf(); strokeStamps(st, P, b, doc.w, doc.h, .5); return Array.from(b.a.subarray(0, b.n)); },
+  setDoc(d) { doc = d; gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); } };
+if (/[?&]lab=/.test(location.search)) document.body.append(h('script', { src: 'dev/lab.js' }));   // local A/B against reference images (dev only)
+})();
+</script>
+</body>
+</html>
