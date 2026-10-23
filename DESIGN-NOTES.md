@@ -38,3 +38,15 @@ After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface
 - **Finish:** Lambert body plus a small studio (softbox, long strip, faint card, dark floor) through Fresnel. Gloss sharpens and strengthens it; the dark floor keeps steep walls black on glossy stone.
 - GPU gotchas: lattice features use an integer hash, because a float hash of `cell + offset + seed` gets reassociated by Metal's fast-math and clips craters along cell lines. The facet search is 5×5 with a stretch-only metric (≤1.6), for the same reason.
 - Source material: Adobe's `.sbsar` files and previews are copied into `dev/materials/` (gitignored, not ours to redistribute). Next: bake their maps in Substance 3D Player, add the Illustrator reference renders to `dev/ref/`, and match in the lab (`?lab=comet` / `?lab=obsidian`).
+
+## Sessions and the floating panel (round 4)
+- **Sessions:** every drawing is a session in IndexedDB. The `meta` store holds name, dates, stroke count and a 360px PNG thumbnail; `docs` holds raw strokes plus params, with the background photo as a Blob (it now survives reloads). localStorage keeps only prefs and the open session's id.
+- Autosave runs 600ms after each change, plus immediately when the app is hidden. Writes are chained, so switching sessions never interleaves with a save. Thumbnails re-render 1.5s after a save and on open, using the export renderer (`renderCanvas`).
+- **Sessions tab:** rename the open session (ghost input), New session, a 2-up thumbnail grid (tap to open; × on hover, or on the open card on touch), and delete with Undo (no confirm). Backup: Save to Files / Open file as `.json`, with the photo inlined.
+- Each record stores `v` (format) and `renderer` (shader generation, 3 = stone). Saved sessions re-render with the current shaders by design; `renderer` is there in case an old look ever needs keeping.
+- **Migration:** the single localStorage drawing from v1 becomes "Session 1". Prefs aren't rewritten until it's safely in IndexedDB. v1 prefs also take the new shared brush defaults once.
+- **Undo history** is per visit and resets when switching sessions.
+- **Brush defaults** are now shared by all three brushes (size 37, pressure .84, speed .15, tilt .33, merge .28, pooling .54, wobble .31, smoothing .92, drop ends). Stone starts at Volume 1.75 / Edge 11.
+- **Panel:** it floats over the artboard instead of pushing it aside, as see-through frosted glass (38% wash, blur 16). Legibility comes from the backdrop filter (contrast .78, brightness 1.1), darker inks inside the panel and a faint light halo, rather than an opaque fill. Slider tracks are faint frost and the filled part is the bright chip.
+- **Adaptive glass:** when what's behind the panel is dark (the board tone, or a photo's average, weighted by how much of the panel the board covers), it switches to smoky dark glass with light text, as in the user's reference.
+- **Touch:** palm rejection after Pencil use now needs a contact wider than 90px (it was 44, and Safari reports fingertips at around 40–60px, which silently ate pinches and two-finger taps). The corner readout shows the last touch size, for checking on the iPad.

@@ -17,7 +17,7 @@
   --ink:#1c1b19; --ink-2:#6b6862; --ink-3:#a3a09a;
   --panel:rgba(252,251,249,0.93);
   --line:rgba(0,0,0,0.055); --line-2:rgba(0,0,0,0.10);
-  --fillbg:#f1efeb; --fillfg:#e2dfd8;
+  --fillbg:#f1efeb; --fillfg:#e2dfd8; --card:#ffffff;
   --white:#ffffff;
   --danger:#c0787c;
   --toast:rgba(28,27,25,.92);
@@ -45,7 +45,6 @@ button{font-family:inherit;touch-action:manipulation}
   position:fixed;top:calc(64px + var(--safe-t));left:calc(24px + var(--safe-l));right:calc(24px + var(--safe-r));bottom:calc(96px + var(--safe-b));
   display:grid;place-items:center;transition:right .55s var(--ease),bottom .55s var(--ease);touch-action:none;
 }
-@media (min-width:780px){ body:has(.panel:not([hidden-state])) .stage{right:calc(var(--rail) + 42px + var(--safe-r))} }
 .board{
   position:relative;border-radius:4px;transform-origin:50% 50%;will-change:transform;touch-action:none;
   box-shadow:0 1px 2px rgba(0,0,0,.04),0 30px 70px -24px rgba(0,0,0,.28);
@@ -166,7 +165,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
 /* ── panel ─────────────────────────────────────── */
 .panel{
   position:absolute;background:var(--panel);
-  backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
+  backdrop-filter:blur(16px) saturate(1.5) contrast(.78) brightness(1.1);-webkit-backdrop-filter:blur(16px) saturate(1.5) contrast(.78) brightness(1.1);
   border:1px solid var(--line);border-radius:var(--r);
   box-shadow:0 1px 2px rgba(0,0,0,.03),0 24px 60px -20px rgba(0,0,0,.22);
   display:flex;flex-direction:column;overflow:hidden;
@@ -180,9 +179,36 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
   .panel{left:10px;right:10px;bottom:calc(10px + var(--safe-b));height:min(58vh,430px);border-radius:22px}
   .panel[hidden-state]{transform:translateY(calc(100% + 24px));opacity:0;pointer-events:none}
   body:has(.panel:not([hidden-state])) .pill{opacity:0;pointer-events:none;transform:translateX(-50%) translateY(12px)}
-  body:has(.panel:not([hidden-state])) .stage{bottom:calc(min(58vh,430px) + 24px + var(--safe-b))}
   .tools button{padding:0 10px 0 9px;letter-spacing:.08em}
 }
+/* The panel floats over the artboard as see-through frosted glass (the canvas no longer shifts when it opens).
+   Legibility comes from the backdrop filter, not an opaque fill: it softens the contrast of whatever is behind
+   and lifts it a touch, so dark strokes turn into a mid-tone haze. Tracks and cards are light frost chips,
+   the inks step darker, and a faint light halo keeps small labels clean over busy artwork. */
+.panel{
+  --panel:rgba(248,247,244,.38); --fillbg:rgba(255,255,255,.34); --fillfg:rgba(40,36,30,.14); --card:rgba(255,255,255,.3);
+  --ink:#141310; --ink-2:#3b3833; --ink-3:#5f5c56; --line:rgba(255,255,255,.4); --line-2:rgba(0,0,0,.12);
+  border-color:rgba(255,255,255,.5);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 1px 2px rgba(0,0,0,.04),0 24px 60px -20px rgba(0,0,0,.3);
+  text-shadow:0 0 6px rgba(250,249,247,.65);
+}
+.panel input[type=text]{text-shadow:none}
+/* sliders on glass: a faint frost track, the filled part the brighter chip, so the value reads at a glance */
+.panel .ctrl{background:rgba(255,255,255,.14)}
+.panel .ctrl::before{background:rgba(255,255,255,.62)}
+/* dark glass: when what's behind the panel is dark (Ink / Slate boards, dark photos), light text on smoky glass */
+.panel.dark{
+  --panel:rgba(26,25,23,.4); --fillbg:rgba(255,255,255,.12); --fillfg:rgba(255,255,255,.2); --card:rgba(255,255,255,.07);
+  --ink:#f6f4f0; --ink-2:#dcd9d2; --ink-3:#aeaaa3; --line:rgba(255,255,255,.1); --line-2:rgba(255,255,255,.22); --white:rgba(255,255,255,.2);
+  border-color:rgba(255,255,255,.14);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.1),0 24px 60px -20px rgba(0,0,0,.45);
+  text-shadow:0 0 6px rgba(0,0,0,.45);
+  backdrop-filter:blur(16px) saturate(1.4) contrast(.8) brightness(.92);-webkit-backdrop-filter:blur(16px) saturate(1.4) contrast(.8) brightness(.92);
+}
+.panel.dark .ctrl{background:rgba(255,255,255,.06)}
+.panel.dark .ctrl::before{background:rgba(255,255,255,.22)}
+.panel.dark .btn.primary:hover{background:rgba(255,255,255,.28)}
+.panel.dark .sdel{background:rgba(0,0,0,.45)}
 .phead{display:flex;align-items:center;gap:2px;padding:12px 12px 0}
 .tabs{display:flex;gap:2px;flex:1}
 .tab{
@@ -264,7 +290,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
 /* material chips */
 .mats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .mat{
-  appearance:none;height:64px;border:1px solid var(--line);background:var(--white);border-radius:13px;
+  appearance:none;height:64px;border:1px solid var(--line);background:var(--card);border-radius:13px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 4px;cursor:pointer;color:var(--ink-2);
   font:300 11px/1 var(--mono);letter-spacing:.02em;min-width:0;
   transition:transform .35s var(--ease),color .3s var(--ease),border-color .3s var(--ease),background .3s var(--ease),box-shadow .35s var(--ease);
@@ -306,7 +332,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
 .acts svg.i{width:14px;height:14px}
 
 .btn{
-  appearance:none;border:1px solid var(--line-2);background:var(--white);border-radius:11px;
+  appearance:none;border:1px solid var(--line-2);background:var(--card);border-radius:11px;
   height:34px;padding:0 12px;cursor:pointer;color:var(--ink-2);
   font:300 11px/1 var(--mono);letter-spacing:.06em;
   transition:transform .3s var(--ease),color .3s var(--ease),border-color .3s var(--ease),background .3s var(--ease);
@@ -317,6 +343,33 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
 .btn.primary:hover{background:#d8d4cc}
 .btn.quiet{border-color:rgba(192,120,124,.32);color:var(--danger)}
 .btn.quiet:hover{border-color:var(--danger)}
+
+/* sessions */
+.sname{flex:1;min-width:0}
+.sess{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.scard{
+  position:relative;border:1px solid var(--line);background:var(--card);border-radius:13px;padding:6px;cursor:pointer;
+  color:var(--ink-2);min-width:0;
+  transition:transform .35s var(--ease),box-shadow .35s var(--ease),color .3s var(--ease),background .3s var(--ease);
+}
+.scard:hover{color:var(--ink);transform:translateY(-2px);box-shadow:0 8px 18px -10px rgba(0,0,0,.18)}
+.scard:active{transform:scale(.98)}
+.scard[aria-current="true"]{background:var(--fillbg);border-color:transparent;color:var(--ink)}
+.sthumb{aspect-ratio:4/3;border-radius:9px;background:var(--fillbg);overflow:hidden}
+.sthumb img{width:100%;height:100%;object-fit:contain;display:block;animation:fadein .45s var(--ease)}
+@keyframes fadein{from{opacity:0}}
+.smeta{display:flex;flex-direction:column;gap:4px;padding:7px 3px 2px;min-width:0}
+.smeta .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;letter-spacing:.02em}
+.smeta small{color:var(--ink-3);font-size:10px}
+.sdel{
+  position:absolute;top:10px;right:10px;width:24px;height:24px;border:0;border-radius:8px;padding:0;cursor:pointer;
+  background:rgba(255,255,255,.88);color:var(--ink-2);display:grid;place-items:center;opacity:0;
+  transition:opacity .25s var(--ease),color .25s var(--ease);
+}
+.sdel svg.i{width:13px;height:13px}
+.scard:hover .sdel{opacity:1}
+.sdel:hover{color:var(--ink)}
+@media (hover:none){.scard[aria-current="true"] .sdel{opacity:1}.scard:hover{transform:none}}
 .btnrow{display:flex;gap:6px}
 .btnrow .btn{flex:1}
 
@@ -397,6 +450,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
         <button class="tab" data-tab="brush" role="tab">Brush</button>
         <button class="tab" data-tab="surface" role="tab">Surface</button>
         <button class="tab" data-tab="canvas" role="tab">Canvas</button>
+        <button class="tab" data-tab="sessions" role="tab">Sessions</button>
       </div>
       <button class="xbtn" id="closePanel" title="Close (Esc)"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
@@ -404,6 +458,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
       <div class="pane" data-pane="brush"></div>
       <div class="pane" data-pane="surface"></div>
       <div class="pane" data-pane="canvas"></div>
+      <div class="pane" data-pane="sessions"></div>
     </div>
   </aside>
 </div>
@@ -411,6 +466,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
 <div class="veil" id="veil">Drop an image to draw on it</div>
 <div class="toast" id="toast"></div>
 <input type="file" id="file" accept="image/*" hidden>
+<input type="file" id="sessFile" accept=".json,application/json" hidden>
 
 <script>
 (() => {
@@ -486,18 +542,18 @@ const STONE_PRESETS = [
 ];
 const DEF = {
   slip: {
-    size: 40, pressure: .8, speed: .7, tilt: .35, vary: .35, merge: .55, pool: 1, smooth: .35, end: 'drop', taper: 1.2,
+    size: 37, pressure: .84, speed: .15, tilt: .33, vary: .31, merge: .28, pool: .54, smooth: .92, end: 'drop', taper: 1.2,
     color: '#E4E1DA', gloss: .55, shine: 1, brk: .3, speckle: 0, grain: .35, vol: 1, edge: 20, light: 120, shadow: 0, preset: 'Porcelain',
   },
   metal: {
-    size: 44, pressure: .8, speed: .75, tilt: .35, vary: .45, merge: .5, pool: 1.2, smooth: .3, end: 'drop', taper: 1.4,
+    size: 37, pressure: .84, speed: .15, tilt: .33, vary: .31, merge: .28, pool: .54, smooth: .92, end: 'drop', taper: 1.4,
     c0: '#101215', c1: '#6F757B', c2: '#F6F7F8', sky: .39, rim: .86, contrast: 1, brk: .15, rough: .08, grain: .7, shine: 1, iri: 0,
     vol: 1, edge: 60, light: 300, shadow: 0, preset: 'Chrome',
   },
   stone: {
     size: 37, pressure: .84, speed: .15, tilt: .33, vary: .31, merge: .28, pool: .54, smooth: .92, end: 'drop', taper: 1.2,
     color: '#8E8B86', pits: .85, facets: 0, grit: .75, scale: 1, relief: 1, gloss: .06, shine: .6,
-    vol: 1, edge: 40, light: 120, shadow: 0, preset: 'Comet Pit',
+    vol: 1.75, edge: 11, light: 120, shadow: 0, preset: 'Comet Pit',
   },
 };
 const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
@@ -1103,7 +1159,7 @@ function growBounds(b, buf, from) {
 function liveCtx(L) { return { field: layerTarget(L), scratch: T.scratch, erase: T.erase, minSig: .7 / T.S }; }
 function layerTarget(L) {
   let t = T.layers.get(L.id);
-  if (!t) { t = makeTarget(T.w, T.h, FIELD); clearTarget(t); T.layers.set(L.id, t); dirty.add(L.id); }
+  if (!t) { t = makeTarget(T.w, T.h, FIELD); clearTarget(t); T.layers.set(L.id, t); dirty.add(L.id); request(); }   // a target born mid-composite still needs its build frame
   return t;
 }
 function rebuild(L) { buildLayer(L, liveCtx(L)); }
@@ -1220,7 +1276,7 @@ function compositeScreen() {
 /* ════════════════════════════════════════════════════════════════════
    frame loop
    ════════════════════════════════════════════════════════════════════ */
-let raf = 0, lastMs = 0, liveP = null;
+let raf = 0, lastMs = 0, liveP = null, lastTouch = 0;
 const request = () => { needsDraw = true; if (!raf) raf = requestAnimationFrame(frame); };
 function frame() {
   raf = 0;
@@ -1242,6 +1298,7 @@ const statEl = $('#stat');
 function updateStat() {
   let s = `${doc.w}×${doc.h} · ${lastMs.toFixed(1)} ms`;
   if (liveP) s += ` · ${liveP.kind} ${liveP.p.toFixed(2)}${liveP.tilt != null ? ' · tilt ' + liveP.tilt + '°' : ''}`;
+  if (lastTouch) s += ` · touch ${lastTouch}px`;
   statEl.textContent = s;
 }
 
@@ -1274,6 +1331,7 @@ function applyView() {
   zq('pct').textContent = Math.round(pctOf(view.z)) + '%';
   zq('fit').setAttribute('aria-pressed', String(atFit()));
   if (T.w) scheduleRes();
+  updateGlass();
 }
 const untransformedCentre = () => { const r = board.getBoundingClientRect(); return [r.left + r.width / 2 - view.x, r.top + r.height / 2 - view.y]; };
 function zoomAt(px, py, factor) {
@@ -1344,7 +1402,7 @@ const cloneLayers = ls => ls.map(L => ({ ...L, params: { ...L.params }, strokes:
 const snapshot = () => ({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: doc.bgImage, active: doc.active, layers: cloneLayers(doc.layers) });
 function commit(snap) {
   hist.undo.push(snap); if (hist.undo.length > 150) hist.undo.shift();
-  hist.redo.length = 0; updUndo(); save();
+  hist.redo.length = 0; updUndo(); docDirty = true; save();
 }
 function mutate(fn) { const s = snapshot(); fn(); commit(s); }
 let editSnap = null;
@@ -1360,40 +1418,226 @@ function restore(s) {
   if (L) { ui.brush = L.brush; if (ui.tool !== 'erase') ui.tool = L.brush; }
   afterChange();
 }
-function undo() { if (drawing) return; const s = hist.undo.pop(); if (!s) return; hist.redo.push(snapshot()); restore(s); updUndo(); save(); }
-function redo() { if (drawing) return; const s = hist.redo.pop(); if (!s) return; hist.undo.push(snapshot()); restore(s); updUndo(); save(); }
+function undo() { if (drawing) return; const s = hist.undo.pop(); if (!s) return; hist.redo.push(snapshot()); restore(s); updUndo(); docDirty = true; save(); }
+function redo() { if (drawing) return; const s = hist.redo.pop(); if (!s) return; hist.undo.push(snapshot()); restore(s); updUndo(); docDirty = true; save(); }
 function updUndo() { $('#undo').disabled = !hist.undo.length; $('#redo').disabled = !hist.redo.length; }
 
+/* Sessions. Every drawing is a session in IndexedDB: 'meta' holds the list (name, dates, thumbnail),
+   'docs' the drawing itself (raw strokes + params, background image as a Blob). localStorage keeps only
+   small prefs and which session is open. Strokes are stored raw, so a saved session re-renders with the
+   current shaders; RENDERER records which look it was made with, should an old look ever need keeping. */
 const KEY = 'slip-metal.v3';
-let saveT = 0, saveWarned = false;
+const SESSION_V = 1;      // record / file format
+const RENDERER = 3;       // bump when a shader change alters how saved drawings look (3 = stone)
+const isLab = /[?&]lab=/.test(location.search);
+let session = null;       // meta of the open session: { id, name, created, updated, strokes, thumb }
+let sessions = [];        // every session's meta, newest first
+let docDirty = false, saveT = 0, thumbT = 0, saving = Promise.resolve();
+let prefsReady = false;    // never overwrite stored prefs (or an unmigrated drawing) before boot has read them
 const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000;
 function packPts(p) { const o = new Array(p.length); for (let i = 0; i < p.length; i += 5) { o[i] = r1(p[i]); o[i + 1] = r1(p[i + 1]); o[i + 2] = r3(p[i + 2]); o[i + 3] = Math.round(p[i + 3]); o[i + 4] = Math.round(p[i + 4] * 100) / 100; } return o; }
-function save() {
-  if (/[?&]lab=/.test(location.search)) return;
-  clearTimeout(saveT);
-  saveT = setTimeout(() => {
+
+const DB = {
+  ok: false, db: null,
+  async open() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({
-        v: 1, w: doc.w, h: doc.h, bg: doc.bg, active: doc.active, last: lastParams,
-        ui: { tool: ui.tool, brush: ui.brush, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') },
-        layers: doc.layers.map(L => ({ id: L.id, brush: L.brush, name: L.name, visible: L.visible, seed: L.seed, params: L.params,
-          strokes: L.strokes.map(s => ({ ...s, pts: packPts(s.pts) })) })),
-      }));
-    } catch (e) { if (!saveWarned) { saveWarned = true; toast('Too large to autosave in this browser'); } }
-  }, 600);
+      this.db = await new Promise((res, rej) => {
+        const r = indexedDB.open('slip-metal', 1);
+        r.onupgradeneeded = () => { r.result.createObjectStore('meta', { keyPath: 'id' }); r.result.createObjectStore('docs', { keyPath: 'id' }); };
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error('blocked'));
+      });
+      this.ok = true;
+    } catch (e) { this.ok = false; }
+    return this.ok;
+  },
+  req(store, mode, fn) {
+    return new Promise((res, rej) => {
+      const t = this.db.transaction(store, mode), q = fn(t.objectStore(store));
+      t.oncomplete = () => res(q.result); t.onerror = t.onabort = () => rej(t.error);
+    });
+  },
+  get(s, k) { return this.req(s, 'readonly', o => o.get(k)); },
+  all(s) { return this.req(s, 'readonly', o => o.getAll()); },
+  put(s, v) { return this.req(s, 'readwrite', o => o.put(v)); },
+  del(s, k) { return this.req(s, 'readwrite', o => o.delete(k)); },
+};
+
+// background images are canvases in memory and PNG Blobs on disk; encode each canvas once
+const blobOf = new WeakMap();
+const canvasBlob = cv => { let p = blobOf.get(cv); if (!p) { p = new Promise(r => cv.toBlob(r, 'image/png')); blobOf.set(cv, p); } return p; };
+async function blobCanvas(b) {
+  const img = await createImageBitmap(b);
+  const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
+  cv.getContext('2d').drawImage(img, 0, 0); if (img.close) img.close();
+  blobOf.set(cv, Promise.resolve(b));
+  return cv;
 }
-function load() {
+async function docRecord(d, id) {
+  const layers = d.layers.map(L => ({ id: L.id, brush: L.brush, name: L.name, visible: L.visible, seed: L.seed, params: { ...L.params },
+    strokes: L.strokes.map(s => ({ ...s, pts: packPts(s.pts) })) }));
+  return { id, v: SESSION_V, renderer: RENDERER, w: d.w, h: d.h, bg: d.bg, active: d.active, layers,
+    bgImage: d.bgImage ? await canvasBlob(d.bgImage) : null };
+}
+async function docFromRecord(r) {
+  const d = { w: r.w, h: r.h, bg: r.bg, active: r.active, bgImage: r.bgImage ? await blobCanvas(r.bgImage).catch(() => null) : null,
+    layers: (r.layers || []).map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) };
+  if (!d.layers.some(L => L.id === d.active)) d.active = d.layers.length ? d.layers[d.layers.length - 1].id : null;
+  return d;
+}
+const strokeCount = d => d.layers.reduce((n, L) => n + L.strokes.length, 0);
+function newMeta(name) { const t = Date.now(); return { id: uid(), name, created: t, updated: t, strokes: 0, thumb: null }; }
+function nextName() {
+  let n = 0;
+  for (const s of sessions) { const m = /^Session (\d+)$/.exec(s.name); if (m) n = Math.max(n, +m[1]); }
+  return `Session ${Math.max(n, sessions.length) + 1}`;
+}
+async function listSessions() { sessions = (await DB.all('meta')).sort((a, b) => b.updated - a.updated); adopt(); }
+// the open session's meta is the very object in the list, so a rename or save shows up without a reload
+function adopt() { if (session) sessions = sessions.map(m => m.id === session.id ? session : m); }
+
+function savePrefs() {
+  if (isLab || !prefsReady) return;
   try {
-    const d = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (!d || d.v !== 1 || !Array.isArray(d.layers)) return false;
-    doc = { w: d.w, h: d.h, bg: d.bg, bgImage: null, active: d.active,
-      layers: d.layers.map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) };
-    if (d.last) for (const b of BRUSHES) Object.assign(lastParams[b], d.last[b] || {});
-    if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
-    if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
-    if (!activeLayer() && doc.layers.length) doc.active = doc.layers[doc.layers.length - 1].id;
-    return true;
-  } catch (e) { return false; }
+    localStorage.setItem(KEY, JSON.stringify({ v: 2, cur: session ? session.id : null, last: lastParams,
+      ui: { tool: ui.tool, brush: ui.brush, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
+  } catch (e) {}
+}
+function save() {
+  if (isLab) return;
+  clearTimeout(saveT);
+  saveT = setTimeout(saveNow, 600);
+}
+// writes are chained so a session switch never interleaves with a save of the one being left
+function saveNow() {
+  clearTimeout(saveT); saveT = 0;
+  savePrefs();
+  if (!docDirty || !session || !DB.ok) return saving;
+  docDirty = false;
+  const s = session, d = doc;
+  saving = saving.then(async () => {
+    const rec = await docRecord(d, s.id);
+    s.updated = Date.now(); s.strokes = strokeCount(d);
+    await DB.put('docs', rec); await DB.put('meta', { ...s });
+    if (s === session) { sessions = [s, ...sessions.filter(m => m.id !== s.id)]; clearTimeout(thumbT); thumbT = setTimeout(saveThumb, 1500); }
+  }).catch(e => { console.error(e); docDirty = true; toast("Couldn't save this session"); });
+  return saving;
+}
+async function saveThumb() {
+  clearTimeout(thumbT); thumbT = 0;
+  if (!session || !DB.ok) return;
+  if (drawing || exporting) { thumbT = setTimeout(saveThumb, 1000); return; }
+  const s = session;
+  try {
+    const { cv } = renderCanvas(Math.min(1, 360 / Math.max(doc.w, doc.h)), false, false);
+    s.thumb = await new Promise(r => cv.toBlob(r, 'image/png'));
+    await (saving = saving.then(() => DB.put('meta', { ...s })));
+    renderSessions();
+  } catch (e) { console.error(e); }
+  finally { request(); }
+}
+// before leaving a session: write what's pending and give it a fresh thumbnail
+async function flush() {
+  saveNow(); await saving;
+  if (thumbT) await saveThumb();
+}
+function setDocument(d) {
+  doc = d;
+  hist.undo.length = 0; hist.redo.length = 0; updUndo();
+  gcTargets();
+  for (const L of doc.layers) dirty.add(L.id);
+  view.z = 1; fit(); updateResolution();
+  const L = activeLayer();
+  if (L) { ui.brush = L.brush; if (ui.tool !== 'erase') ui.tool = L.brush; }
+  afterChange();
+}
+let switching = false;
+async function guarded(fn) { if (drawing || switching) return; switching = true; try { await fn(); } finally { switching = false; } }
+const openSession = id => guarded(async () => {
+  if (session && session.id === id) return;
+  await flush();
+  const [meta, rec] = await Promise.all([DB.get('meta', id), DB.get('docs', id)]);
+  if (!meta || !rec) { toast("That session couldn't be opened"); return; }
+  session = meta; adopt();
+  setDocument(await docFromRecord(rec));
+  savePrefs();
+});
+async function startSession(d, name) {
+  session = newMeta(name || nextName());
+  sessions = [session, ...sessions];
+  setDocument(d);
+  docDirty = true; await saveNow();
+  thumbT = setTimeout(saveThumb, 300);
+}
+const newSession = () => guarded(async () => {
+  await flush();
+  await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, layers: [], active: null });
+  toast(`${session.name} started`);
+});
+const deleteSession = id => guarded(async () => {
+  const meta = sessions.find(s => s.id === id);
+  if (!meta) return;
+  await flush();
+  const rec = await DB.get('docs', id);
+  await DB.del('meta', id); await DB.del('docs', id);
+  sessions = sessions.filter(s => s.id !== id);
+  if (session && session.id === id) {
+    session = null;
+    if (sessions.length) { const next = sessions[0]; session = next; setDocument(await docFromRecord(await DB.get('docs', next.id))); savePrefs(); }
+    else await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, layers: [], active: null });
+  }
+  renderSessions();
+  toast(`${meta.name} deleted`, { label: 'Undo', fn: async () => {
+    await DB.put('docs', rec); await DB.put('meta', meta);
+    await listSessions(); renderSessions();
+  } });
+});
+function renameSession(name) {
+  name = name.trim();
+  if (!session || !name || name === session.name) return;
+  session.name = name;
+  if (DB.ok) saving = saving.then(() => DB.put('meta', { ...session }));
+  renderSessions();
+}
+
+// a session file: the same record as on disk, with the background image inlined, for the Files app
+async function saveSessionFile() {
+  if (!session) return;
+  await flush();
+  const rec = await docRecord(doc, session.id);
+  const bgImage = rec.bgImage ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(rec.bgImage); }) : null;
+  const out = { app: 'slip-metal', ...rec, bgImage, name: session.name, created: session.created };
+  delete out.id;
+  const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+  const slug = session.name.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'session';
+  await deliverFile(blob, `${slug}.json`, 'application/json', `Saved ${session.name}`);
+}
+const openSessionFile = file => guarded(async () => {
+  let rec;
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== 'slip-metal' || !Array.isArray(d.layers)) throw new Error('not a session');
+    rec = { ...d, bgImage: d.bgImage ? await (await fetch(d.bgImage)).blob() : null };
+  } catch (e) { toast("That file isn't a saved session"); return; }
+  await flush();
+  const taken = new Set(sessions.map(s => s.name));
+  let name = rec.name || file.name.replace(/\.json$/i, ''), k = 2;
+  while (taken.has(name)) name = `${rec.name} ${k++}`;
+  await startSession(await docFromRecord(rec), name);
+  toast(`Opened ${name}`);
+});
+
+function loadPrefs() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+  if (!d) return {};
+  if (d.last) for (const b of BRUSHES) Object.assign(lastParams[b], d.last[b] || {});
+  // v1 prefs predate the shared brush defaults: carry them over once
+  if (d.v === 1) for (const b of BRUSHES) for (const k of GEOM) if (k !== 'taper') lastParams[b][k] = DEF[b][k];
+  if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
+  if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
+  // v1 kept the one drawing in localStorage; it becomes the first session
+  const legacy = d.v === 1 && Array.isArray(d.layers) ? { w: d.w, h: d.h, bg: d.bg, active: d.active, bgImage: null, layers: d.layers } : null;
+  return { cur: d.cur, legacy };
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1402,6 +1646,7 @@ function load() {
 let drawing = null, gesture = null, panDrag = null, tapInfo = null;
 let penSeen = false, spaceDown = false, forceP = -1;
 const touches = new Map();
+const PALM = 90;
 const ring = $('#ring');
 const isTouchUI = matchMedia('(pointer:coarse)').matches;
 
@@ -1484,7 +1729,9 @@ stage.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') {
     e.preventDefault();
     if (drawing && !drawing.touch) return;                         // palm on glass while the Pencil draws
-    if (penSeen && (e.width > 44 || e.height > 44)) return;        // broad contact = palm, not a finger
+    // broad contact = palm, not a finger. Safari on iPad reports a fingertip at ~40–60px, a palm well past 90
+    lastTouch = Math.round(Math.max(e.width || 0, e.height || 0)); updateStat();
+    if (penSeen && lastTouch > PALM) return;
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
     if (touches.size === 1) tapInfo = { t0: e.timeStamp, max: 1, moved: 0 };
     else if (tapInfo) tapInfo.max = Math.max(tapInfo.max, touches.size);
@@ -1865,13 +2112,74 @@ function renderPanel() {
       ? 'Two-finger tap to undo, three-finger tap to redo. Pinch to zoom. Once a Pencil touches the screen, fingers only navigate.'
       : '<kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>[</kbd> <kbd>]</kbd> size · <kbd>B</kbd> next brush · <kbd>E</kbd> eraser · hold <kbd>Space</kbd> to pan · <kbd>⌘</kbd>+scroll to zoom · <kbd>S</kbd> panel'));
   renderLayers();
+  renderSessions();
   showTab(ui.tab);
 }
+const thumbURL = new WeakMap();
+const urlOf = b => { let u = thumbURL.get(b); if (!u) { u = URL.createObjectURL(b); thumbURL.set(b, u); } return u; };
+function when(t) {
+  const d = Date.now() - t;
+  if (d < 6e4) return 'just now';
+  if (d < 36e5) return Math.round(d / 6e4) + ' min ago';
+  const dt = new Date(t), hm = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (dt.toDateString() === new Date().toDateString()) return 'today ' + hm;
+  return dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + hm;
+}
+function renderSessions() {
+  const sp = pane('sessions');
+  if (!sp) return;
+  if (sp.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;   // don't yank a rename
+  sp.replaceChildren();
+  if (isLab || !DB.ok || !session) { sp.append(hint('Sessions need browser storage, which is turned off here.')); return; }
+  const nm = h('input', { type: 'text', class: 'sname', spellcheck: 'false', 'aria-label': 'Session name' });
+  nm.value = session.name;
+  nm.addEventListener('change', () => renameSession(nm.value));
+  nm.addEventListener('keydown', e => { if (e.key === 'Enter') nm.blur(); });
+  const grid = h('div', { class: 'sess' });
+  for (const m of sessions) {
+    grid.append(h('div', { class: 'scard', role: 'button', tabindex: '0', 'aria-current': String(m.id === session.id),
+        onclick: () => openSession(m.id), onkeydown: e => { if (e.key === 'Enter') openSession(m.id); } },
+      h('div', { class: 'sthumb' }, m.thumb ? h('img', { src: urlOf(m.thumb), alt: '' }) : null),
+      h('div', { class: 'smeta' }, h('span', { class: 'nm' }, m.name), h('small', null, when(m.updated))),
+      h('button', { type: 'button', class: 'sdel', title: 'Delete session', html: ICON.del, onclick: e => { e.stopPropagation(); deleteSession(m.id); } })));
+  }
+  sp.append(sec('This session'), h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Name'), nm),
+    h('div', { class: 'btnrow' }, h('button', { type: 'button', class: 'btn primary', onclick: newSession }, 'New session')),
+    sec('Saved'), grid,
+    sec('Backup'),
+    h('div', { class: 'btnrow' },
+      h('button', { type: 'button', class: 'btn', onclick: saveSessionFile }, 'Save to Files'),
+      h('button', { type: 'button', class: 'btn', onclick: () => $('#sessFile').click() }, 'Open file')),
+    hint('Sessions save as you draw and stay on this device. Saving to Files keeps a copy outside the app.'));
+}
+$('#sessFile').onchange = e => { if (e.target.files[0]) openSessionFile(e.target.files[0]); e.target.value = ''; };
 function markPresets() {
   const L = activeLayer();
   $$('.mat').forEach(b => b.setAttribute('aria-pressed', String(!!L && L.params.preset === b.dataset.name)));
 }
-function markBgs() { $$('.bgs button').forEach((b, i) => b.setAttribute('aria-pressed', String(BGS[i][1] === doc.bg && !doc.bgImage))); }
+// pick light or dark glass from what actually sits behind the panel: the board's tone (colour, or a photo's
+// average) weighted by how much of the panel the board covers; the rest is the near-white page
+const imgLum = new WeakMap();
+function lumOfImage(cv) {
+  if (imgLum.has(cv)) return imgLum.get(cv);
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const x = c.getContext('2d'); x.drawImage(cv, 0, 0, 8, 8);
+  const d = x.getImageData(0, 0, 8, 8).data; let sum = 0;
+  for (let i = 0; i < d.length; i += 4) sum += (.2126 * d[i] + .7152 * d[i + 1] + .0722 * d[i + 2]) / 255;
+  const v = sum / 64; imgLum.set(cv, v); return v;
+}
+function updateGlass() {
+  const boardLum = doc.bgImage ? lumOfImage(doc.bgImage) : doc.bg === 'none' ? .95 : (c => .2126 * c[0] + .7152 * c[1] + .0722 * c[2])(hexRgb(doc.bg));
+  // the panel's layout box, not its animated one, so a sliding-in panel already knows what it will sit over
+  const o = panel.offsetParent ? panel.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
+  const p = { left: o.left + panel.offsetLeft, top: o.top + panel.offsetTop, width: panel.offsetWidth, height: panel.offsetHeight };
+  p.right = p.left + p.width; p.bottom = p.top + p.height;
+  const b = board.getBoundingClientRect();
+  const ox = Math.max(0, Math.min(p.right, b.right) - Math.max(p.left, b.left)), oy = Math.max(0, Math.min(p.bottom, b.bottom) - Math.max(p.top, b.top));
+  const cover = p.width && p.height ? ox * oy / (p.width * p.height) : 0;
+  panel.classList.toggle('dark', lerp(.96, boardLum, cover) < .5);
+}
+function markBgs() { $$('.bgs button').forEach((b, i) => b.setAttribute('aria-pressed', String(BGS[i][1] === doc.bg && !doc.bgImage))); updateGlass(); }
 
 function renderLayers() {
   const box = $('#layers');
@@ -1942,6 +2250,7 @@ function updateGuides() {
   const g = $('#guides');
   g.setAttribute('viewBox', `0 0 ${doc.w} ${doc.h}`);
   board.classList.toggle('clear', doc.bg === 'none' && !doc.bgImage);
+  updateGlass();
   const cx = doc.w / 2, cy = doc.h / 2, R = Math.hypot(doc.w, doc.h);
   const lines = [];
   if (ui.sym === 'x' || ui.sym === 'xy') lines.push([cx, 0, cx, doc.h]);
@@ -1985,6 +2294,72 @@ $('#file').onchange = e => { loadImageFile(e.target.files[0]); e.target.value = 
    export: rebuild every layer at k× and composite off-screen
    ════════════════════════════════════════════════════════════════════ */
 let exporting = false;
+// render the whole document at scale S into a 2D canvas (also used for session thumbnails)
+function renderCanvas(S, transparent, crop) {
+  const w = Math.max(1, Math.round(doc.w * S)), hgt = Math.max(1, Math.round(doc.h * S));
+  S = w / doc.w;
+  const ctx = { field: makeTarget(w, hgt, FIELD), scratch: makeTarget(w, hgt, FIELD), erase: makeTarget(w, hgt, FIELD), minSig: .7 / S };
+  const out = makeTarget(w, hgt, FMT8);
+  const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+  drawBg(out, transparent);
+  for (const L of doc.layers) {
+    if (!L.visible || !L.strokes.length) continue;
+    const lb = [Infinity, Infinity, -Infinity, -Infinity];
+    buildLayer(L, ctx, lb);
+    const pad = (L.params.size * .24 + 3) * L.params.vol * 1.6 + 6;
+    bounds[0] = Math.min(bounds[0], lb[0] - pad); bounds[1] = Math.min(bounds[1], lb[1] - pad);
+    bounds[2] = Math.max(bounds[2], lb[2] + pad); bounds[3] = Math.max(bounds[3], lb[3] + pad);
+    drawLayer(L, ctx.field.tex, out, w, hgt);
+  }
+  let x0 = 0, y0 = 0, x1 = w, y1 = hgt;
+  if (crop && isFinite(bounds[0])) {
+    x0 = clamp(Math.floor(bounds[0] * S), 0, w); y0 = clamp(Math.floor(bounds[1] * S), 0, hgt);
+    x1 = clamp(Math.ceil(bounds[2] * S), 0, w); y1 = clamp(Math.ceil(bounds[3] * S), 0, hgt);
+  }
+  const cw = Math.max(1, x1 - x0), ch = Math.max(1, y1 - y0);
+  const px = new Uint8Array(cw * ch * 4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
+  gl.readPixels(x0, hgt - y1, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  [ctx.field, ctx.scratch, ctx.erase, out].forEach(freeTarget);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const c2 = cv.getContext('2d');
+  const id = c2.createImageData(cw, ch), d = id.data;
+  for (let y = 0; y < ch; y++) {
+    const src = (ch - 1 - y) * cw * 4, dst = y * cw * 4;
+    for (let x = 0; x < cw * 4; x += 4) {
+      const a = px[src + x + 3];
+      const k = a ? 255 / a : 0;
+      d[dst + x] = Math.min(255, px[src + x] * k); d[dst + x + 1] = Math.min(255, px[src + x + 1] * k);
+      d[dst + x + 2] = Math.min(255, px[src + x + 2] * k); d[dst + x + 3] = a;
+    }
+  }
+  c2.putImageData(id, 0, 0);
+  gl.disable(gl.BLEND);
+  return { cv, cw, ch };
+}
+// hand a file to the user: the share sheet on touch (Save to Files / Photos), a download elsewhere
+async function deliverFile(blob, name, type, done) {
+  if (window.claude && window.claude.use) {          // inside a claude.ai artifact: the viewer owns saving
+    const dl = await window.claude.use('downloads');
+    if (!dl) { toast('Saving is not available in this view'); return; }
+    try { await dl.save({ filename: name, data: blob }); toast(done); }
+    catch (err) { toast(err && err.code === 'declined' ? 'Cancelled' : 'Saving is not available in this view'); }
+    return;
+  }
+  const file = new File([blob], name, { type });
+  let shared = false;
+  if (isTouchUI && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); shared = true; } catch (e) { shared = e && e.name === 'AbortError'; }
+  }
+  if (!shared) {
+    const url = URL.createObjectURL(blob);
+    const a = h('a', { href: url, download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+  toast(done);
+}
 async function exportPNG() {
   if (exporting) return;
   if (!doc.layers.some(L => L.visible && L.strokes.length)) { toast('Nothing to export yet'); return; }
@@ -1996,67 +2371,11 @@ async function exportPNG() {
     let S = Math.min(ui.exp.scale, lim / doc.w, lim / doc.h);
     const cap = isTouchUI ? 16e6 : 36e6;
     if (doc.w * doc.h * S * S > cap) S = Math.sqrt(cap / (doc.w * doc.h));
-    const w = Math.round(doc.w * S), hgt = Math.round(doc.h * S);
-    S = w / doc.w;
-    const ctx = { field: makeTarget(w, hgt, FIELD), scratch: makeTarget(w, hgt, FIELD), erase: makeTarget(w, hgt, FIELD), minSig: .7 / S };
-    const out = makeTarget(w, hgt, FMT8);
-    const bounds = [Infinity, Infinity, -Infinity, -Infinity];
-    drawBg(out, ui.exp.transparent);
-    for (const L of doc.layers) {
-      if (!L.visible || !L.strokes.length) continue;
-      const lb = [Infinity, Infinity, -Infinity, -Infinity];
-      buildLayer(L, ctx, lb);
-      const pad = (L.params.size * .24 + 3) * L.params.vol * 1.6 + 6;
-      bounds[0] = Math.min(bounds[0], lb[0] - pad); bounds[1] = Math.min(bounds[1], lb[1] - pad);
-      bounds[2] = Math.max(bounds[2], lb[2] + pad); bounds[3] = Math.max(bounds[3], lb[3] + pad);
-      drawLayer(L, ctx.field.tex, out, w, hgt);
-    }
-    let x0 = 0, y0 = 0, x1 = w, y1 = hgt;
-    if (ui.exp.crop && isFinite(bounds[0])) {
-      x0 = clamp(Math.floor(bounds[0] * S), 0, w); y0 = clamp(Math.floor(bounds[1] * S), 0, hgt);
-      x1 = clamp(Math.ceil(bounds[2] * S), 0, w); y1 = clamp(Math.ceil(bounds[3] * S), 0, hgt);
-    }
-    const cw = Math.max(1, x1 - x0), ch = Math.max(1, y1 - y0);
-    const px = new Uint8Array(cw * ch * 4);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
-    gl.readPixels(x0, hgt - y1, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    [ctx.field, ctx.scratch, ctx.erase, out].forEach(freeTarget);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
-    const c2 = cv.getContext('2d');
-    const id = c2.createImageData(cw, ch), d = id.data;
-    for (let y = 0; y < ch; y++) {
-      const src = (ch - 1 - y) * cw * 4, dst = y * cw * 4;
-      for (let x = 0; x < cw * 4; x += 4) {
-        const a = px[src + x + 3];
-        const k = a ? 255 / a : 0;
-        d[dst + x] = Math.min(255, px[src + x] * k); d[dst + x + 1] = Math.min(255, px[src + x + 1] * k);
-        d[dst + x + 2] = Math.min(255, px[src + x + 2] * k); d[dst + x + 3] = a;
-      }
-    }
-    c2.putImageData(id, 0, 0);
+    const { cv, cw, ch } = renderCanvas(S, ui.exp.transparent, ui.exp.crop);
     const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
     const now = new Date(), pad = n => String(n).padStart(2, '0');
     const name = `slip-metal-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.png`;
-    if (window.claude && window.claude.use) {          // inside a claude.ai artifact: the viewer owns saving
-      const dl = await window.claude.use('downloads');
-      if (!dl) { toast('Saving is not available in this view'); return; }
-      try { await dl.save({ filename: name, data: blob }); toast(`Saved PNG · ${cw}×${ch}`); }
-      catch (err) { toast(err && err.code === 'declined' ? 'Export cancelled' : 'Saving is not available in this view'); }
-      return;
-    }
-    const file = new File([blob], name, { type: 'image/png' });
-    let shared = false;
-    if (isTouchUI && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); shared = true; } catch (e) { shared = e && e.name === 'AbortError'; }
-    }
-    if (!shared) {
-      const url = URL.createObjectURL(blob);
-      const a = h('a', { href: url, download: name });
-      document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    }
-    toast(`Saved PNG · ${cw}×${ch}`);
+    await deliverFile(blob, name, 'image/png', `Saved PNG · ${cw}×${ch}`);
   } catch (err) {
     console.error(err);
     toast('Export failed: ' + (err.message || err));
@@ -2111,15 +2430,47 @@ function seedDemo() {
 /* ════════════════════════════════════════════════════════════════════
    boot
    ════════════════════════════════════════════════════════════════════ */
-if (!load()) seedDemo();
-const L0 = activeLayer();
-if (L0) { ui.brush = L0.brush; if (ui.tool !== 'erase') ui.tool = L0.brush; }
-updUndo();
-fit();
-updateResolution();
-renderPanel();
-afterChange();
-if (document.fonts) document.fonts.ready.then(refreshSegs);
+// open the last session; first run on this version moves the old single drawing into Session 1
+async function boot() {
+  const prefs = loadPrefs();
+  if (isLab || !await DB.open()) {
+    seedDemo();
+    if (!isLab) { prefsReady = !prefs.legacy; setTimeout(() => toast('Sessions need browser storage, which is turned off here'), 400); }
+  } else {
+    try {
+      await listSessions();
+      const cur = sessions.find(s => s.id === prefs.cur) || sessions[0];
+      if (prefs.legacy) {
+        session = newMeta(nextName()); sessions.unshift(session);
+        doc = await docFromRecord(prefs.legacy); docDirty = true;
+      } else if (cur) {
+        session = cur;
+        doc = await docFromRecord(await DB.get('docs', cur.id));
+      } else {
+        seedDemo();
+        session = newMeta('Session 1'); sessions.unshift(session); docDirty = true;
+      }
+      if (docDirty) await saveNow();
+      prefsReady = !(prefs.legacy && docDirty);       // a failed migration keeps the old drawing in place
+      savePrefs();
+      thumbT = setTimeout(saveThumb, 1200);            // refresh in case the app closed before the last one rendered
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    } catch (e) { console.error(e); DB.ok = false; seedDemo(); toast("Saved sessions couldn't be read"); }
+  }
+  for (const L of doc.layers) dirty.add(L.id);
+  const L0 = activeLayer();
+  if (L0) { ui.brush = L0.brush; if (ui.tool !== 'erase') ui.tool = L0.brush; }
+  updUndo();
+  fit();
+  updateResolution();
+  renderPanel();
+  afterChange();
+  if (document.fonts) document.fonts.ready.then(refreshSegs);
+}
+boot();
+// leaving the app (home button, app switcher): write now rather than after the debounce
+addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
+addEventListener('pagehide', () => saveNow());
 window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, T, view, applyView, zoomToPct, dirty, renderPanel,
   stamps(st, P) { const b = new FBuf(); strokeStamps(st, P, b, doc.w, doc.h, .5); return Array.from(b.a.subarray(0, b.n)); },
   setDoc(d) { doc = d; gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); } };
