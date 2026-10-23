@@ -50,3 +50,10 @@ After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface
 - **Panel:** it floats over the artboard instead of pushing it aside, as see-through frosted glass (38% wash, blur 16). Legibility comes from the backdrop filter (contrast .78, brightness 1.1), darker inks inside the panel and a faint light halo, rather than an opaque fill. Slider tracks are faint frost and the filled part is the bright chip.
 - **Adaptive glass:** when what's behind the panel is dark (the board tone, or a photo's average, weighted by how much of the panel the board covers), it switches to smoky dark glass with light text, as in the user's reference.
 - **Touch:** palm rejection after Pencil use now needs a contact wider than 90px (it was 44, and Safari reports fingertips at around 40–60px, which silently ate pinches and two-finger taps). The corner readout shows the last touch size, for checking on the iPad.
+
+## Round 5
+- **Metal is retired from the pill** (and from B's cycle) until a better metal is built. Its shader and presets stay, so Metal layers in saved sessions still render and stay editable. The first-run demo uses Stone instead.
+- **A material chip stays lit after its values are tuned** (the preset name is no longer cleared on edit).
+- **Tenmoku retuned:** #111400, Gloss 1, Shine .81, Break .70, Speckle 0, Grain .56. Every slip preset now sets Shine, so switching presets never inherits it.
+- **Layer rename:** tap the name of a layer twice (or double-click it) to edit it in place. Enter or tapping away saves, Escape cancels, and it's undoable. Our own tap timing is used because iPad Safari doesn't reliably fire `dblclick`.
+- **Session thumbnails** are absolutely positioned inside their 4:3 box. Safari doesn't resolve a % height inside `aspect-ratio`, so a tall drawing's thumbnail grew its card down the panel.

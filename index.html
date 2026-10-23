@@ -321,6 +321,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
 .lrow:hover{color:var(--ink)}
 .lrow[aria-current="true"]{background:var(--fillbg);color:var(--ink)}
 .lrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lname{flex:1;min-width:0;border:0;border-bottom:1px solid var(--ink-3);background:transparent;border-radius:0;font:300 12px/1 var(--mono);color:var(--ink);padding:3px 0;outline:none;-webkit-user-select:text;user-select:text}
 .lrow small{color:var(--ink-3);font-size:10px;white-space:nowrap}
 .lrow.hid .ball{opacity:.3}
 .lrow.hid .nm{color:var(--ink-3)}
@@ -355,8 +356,10 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
 .scard:hover{color:var(--ink);transform:translateY(-2px);box-shadow:0 8px 18px -10px rgba(0,0,0,.18)}
 .scard:active{transform:scale(.98)}
 .scard[aria-current="true"]{background:var(--fillbg);border-color:transparent;color:var(--ink)}
-.sthumb{aspect-ratio:4/3;border-radius:9px;background:var(--fillbg);overflow:hidden}
-.sthumb img{width:100%;height:100%;object-fit:contain;display:block;animation:fadein .45s var(--ease)}
+/* the image is pinned inside its 4:3 box: Safari doesn't resolve a % height inside aspect-ratio, so a tall
+   drawing's thumbnail would otherwise grow the card down the whole panel */
+.sthumb{position:relative;aspect-ratio:4/3;min-height:0;border-radius:9px;background:var(--fillbg);overflow:hidden}
+.sthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;animation:fadein .45s var(--ease)}
 @keyframes fadein{from{opacity:0}}
 .smeta{display:flex;flex-direction:column;gap:4px;padding:7px 3px 2px;min-width:0}
 .smeta .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;letter-spacing:.02em}
@@ -433,7 +436,6 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
     <div class="tools" id="tools">
       <i class="thumb"></i>
       <button data-tool="slip" title="Slip (B)"><span class="ball" id="ballSlip"></span>Slip</button>
-      <button data-tool="metal" title="Metal (B)"><span class="ball" id="ballMetal"></span>Metal</button>
       <button data-tool="stone" title="Stone (B)"><span class="ball" id="ballStone"></span>Stone</button>
       <button data-tool="erase" title="Eraser (E)">
         <svg class="i" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4-8.5 8.5H6l-1.5-1.5a1.5 1.5 0 010-2.1z"/><path d="M10 18h9"/></svg>Erase
@@ -510,15 +512,15 @@ const ICON = {
    brushes, presets, defaults
    ════════════════════════════════════════════════════════════════════ */
 const SLIP_PRESETS = [
-  { name: 'Porcelain', color: '#E4E1DA', gloss: .55, brk: .3,  speckle: 0,   grain: .35 },
-  { name: 'Stoneware', color: '#D3C7B1', gloss: .3,  brk: .55, speckle: .6,  grain: .55 },
-  { name: 'Celadon',   color: '#98B6A1', gloss: .9,  brk: .85, speckle: .05, grain: .2 },
-  { name: 'Terracotta',color: '#B05A39', gloss: .05, brk: .2,  speckle: .12, grain: .8 },
-  { name: 'Tenmoku',   color: '#2C1C14', gloss: .9,  brk: .95, speckle: 0,   grain: .2 },
-  { name: 'Cobalt',    color: '#2B4893', gloss: .85, brk: .6,  speckle: .04, grain: .2 },
-  { name: 'Butter',    color: '#E5D093', gloss: .65, brk: .5,  speckle: .08, grain: .3 },
-  { name: 'Blush',     color: '#DFAA9B', gloss: .5,  brk: .45, speckle: .1,  grain: .35 },
-  { name: 'Ink',       color: '#1A1918', gloss: .95, brk: .15, speckle: 0,   grain: .15 },
+  { name: 'Porcelain', color: '#E4E1DA', gloss: .55, brk: .3,  speckle: 0,   grain: .35, shine: 1 },
+  { name: 'Stoneware', color: '#D3C7B1', gloss: .3,  brk: .55, speckle: .6,  grain: .55, shine: 1 },
+  { name: 'Celadon',   color: '#98B6A1', gloss: .9,  brk: .85, speckle: .05, grain: .2,  shine: 1 },
+  { name: 'Terracotta',color: '#B05A39', gloss: .05, brk: .2,  speckle: .12, grain: .8,  shine: 1 },
+  { name: 'Tenmoku',   color: '#111400', gloss: 1,   brk: .7,  speckle: 0,   grain: .56, shine: .81 },
+  { name: 'Cobalt',    color: '#2B4893', gloss: .85, brk: .6,  speckle: .04, grain: .2,  shine: 1 },
+  { name: 'Butter',    color: '#E5D093', gloss: .65, brk: .5,  speckle: .08, grain: .3,  shine: 1 },
+  { name: 'Blush',     color: '#DFAA9B', gloss: .5,  brk: .45, speckle: .1,  grain: .35, shine: 1 },
+  { name: 'Ink',       color: '#1A1918', gloss: .95, brk: .15, speckle: 0,   grain: .15, shine: 1 },
 ];
 const METAL_PRESETS = [
   { name: 'Chrome',   c0: '#101215', c1: '#6F757B', c2: '#F6F7F8', sky: .39, rim: .86, contrast: 1,    brk: .15, rough: .08, grain: .7,  iri: 0 },
@@ -558,6 +560,7 @@ const DEF = {
 };
 const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
 const BRUSHES = ['slip', 'metal', 'stone'];
+const TOOLS = ['slip', 'stone'];      // brushes offered in the pill; Metal is retired until a better one, but old Metal layers still render
 const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone' };
 const PRESETS = { slip: SLIP_PRESETS, metal: METAL_PRESETS, stone: STONE_PRESETS };
 const BGS = [['Paper', '#F4F2EE'], ['Stone', '#E2DFD8'], ['Sand', '#CDBFAD'], ['Slate', '#6F747B'], ['Ink', '#161616'], ['Clear', 'none']];
@@ -1634,6 +1637,8 @@ function loadPrefs() {
   // v1 prefs predate the shared brush defaults: carry them over once
   if (d.v === 1) for (const b of BRUSHES) for (const k of GEOM) if (k !== 'taper') lastParams[b][k] = DEF[b][k];
   if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
+  if (!TOOLS.includes(ui.brush)) ui.brush = 'stone';
+  if (ui.tool !== 'erase' && !TOOLS.includes(ui.tool)) ui.tool = ui.brush;
   if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
   // v1 kept the one drawing in localStorage; it becomes the first session
   const legacy = d.v === 1 && Array.isArray(d.layers) ? { w: d.w, h: d.h, bg: d.bg, active: d.active, bgImage: null, layers: d.layers } : null;
@@ -1809,7 +1814,7 @@ addEventListener('keydown', e => {
     else { const L = activeLayer(); if (L) setParam(L, 'size', clamp(Math.round(L.params.size * f), 2, 140)); }
     refreshControls(); return;
   }
-  if (k === 'b') setTool(ui.tool === 'erase' ? ui.brush : BRUSHES[(BRUSHES.indexOf(ui.tool) + 1) % BRUSHES.length]);
+  if (k === 'b') setTool(ui.tool === 'erase' ? ui.brush : TOOLS[(TOOLS.indexOf(ui.tool) + 1) % TOOLS.length]);
   else if (k === 'e') setTool(ui.tool === 'erase' ? ui.brush : 'erase');
   else if (k === 's') togglePanel();
   else if (k === 'escape') togglePanel(false);
@@ -1867,7 +1872,7 @@ function presetBall(brush, pr) {
   return `radial-gradient(circle at 34% 30%, #fff 0 7%, ${hi} 16%, ${pr.color} 46%, ${lo} 100%)`;
 }
 function updateBalls() {
-  for (const b of BRUSHES) {
+  for (const b of TOOLS) {
     const L = [...doc.layers].reverse().find(l => l.brush === b && l.id === doc.active) || [...doc.layers].reverse().find(l => l.brush === b);
     $('#ball' + NAMES[b]).style.background = ballCss(L || { brush: b, params: lastParams[b] });
   }
@@ -2019,7 +2024,7 @@ function renderPanel() {
   const L = activeLayer();
   const brush = L ? L.brush : ui.brush;
   const P = L ? L.params : lastParams[brush];
-  const set = (k) => v => { if (L) setParam(L, k, v); else { lastParams[brush][k] = v; } if (!GEOM.has(k) && L) { L.params.preset = null; markPresets(); } updateBalls(); };
+  const set = (k) => v => { if (L) setParam(L, k, v); else { lastParams[brush][k] = v; } updateBalls(); };
   const ps = d => slider({ label: d[1], min: d[2], max: d[3], step: d[4], suf: d[5], get: () => (L ? L.params : lastParams[brush])[d[0]], set: set(d[0]) });
 
   // Brush
@@ -2190,7 +2195,12 @@ function renderLayers() {
     const L = doc.layers[i];
     const btn = (icon, title, fn) => h('button', { type: 'button', title, html: icon, onclick: e => { e.stopPropagation(); fn(); } });
     const row = h('div', { class: 'lrow' + (L.visible ? '' : ' hid'), 'aria-current': String(L.id === doc.active), role: 'button', tabindex: '0',
-      onclick: () => selectLayer(L.id) },
+      'data-id': L.id, onclick: e => {
+        // a second tap on the name renames; our own timing, since iPad Safari doesn't reliably fire dblclick
+        const now = performance.now(), again = lastTap.id === L.id && now - lastTap.t < 450 && e.target.closest('.nm');
+        lastTap = again ? { id: null, t: 0 } : { id: L.id, t: now };
+        if (again) renameLayer(L.id); else selectLayer(L.id);
+      } },
       h('span', { class: 'ball', style: `background:${ballCss(L)}` }),
       h('span', { class: 'nm' }, L.name),
       h('small', null, L.strokes.length ? String(L.strokes.length) : 'empty'),
@@ -2201,6 +2211,25 @@ function renderLayers() {
         btn(ICON.del, 'Delete layer', () => deleteLayer(L.id))));
     box.append(row);
   }
+}
+let lastTap = { id: null, t: 0 };
+function renameLayer(id) {
+  const L = layerById(id), row = $(`.lrow[data-id="${id}"]`);
+  if (!L || !row) return;
+  const inp = h('input', { type: 'text', class: 'lname', spellcheck: 'false', 'aria-label': 'Layer name' });
+  inp.value = L.name;
+  let done = false;
+  const finish = keep => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    if (keep && v && v !== L.name) mutate(() => { L.name = v; });
+    renderLayers();
+  };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); });
+  inp.addEventListener('blur', () => finish(true));
+  inp.addEventListener('click', e => e.stopPropagation());
+  $('.nm', row).replaceWith(inp);
+  inp.focus(); inp.select();
 }
 function selectLayer(id) {
   doc.active = id;
@@ -2413,18 +2442,18 @@ function seedDemo() {
     return [250 + 1080 * u - 120 * Math.sin(a), 690 + 190 * Math.cos(a) * (1 - .25 * u) - 120 * Math.sin(u * Math.PI)];
   }, { dur: 2300, speed: u => .55 + .9 * Math.abs(Math.sin(u * Math.PI * 2 * 3.3 + .4)), pressure: u => .35 + .35 * Math.sin(u * Math.PI) }));
   slip.strokes.push(synth(u => [292 + u * .5, 360 + u * .5], { dur: 60, N: 4, hold: 40, pressure: () => .5 }));
-  const metal = newLayer('metal');
-  metal.strokes.push(synth(u => {
+  const stone = newLayer('stone');
+  stone.strokes.push(synth(u => {
     const x = 340 + 980 * u;
     return [x, 300 + 150 * Math.sin(u * Math.PI * 1.6 + .3) + 60 * Math.sin(u * Math.PI * 5)];
   }, { dur: 1500, speed: u => .5 + 1.1 * Math.abs(Math.cos(u * Math.PI * 5)), pressure: u => .3 + .45 * Math.sin(u * Math.PI) }));
-  metal.strokes.push(synth(u => {
+  stone.strokes.push(synth(u => {
     const a = u * Math.PI * 2 * 1.15;
     return [1180 + 150 * Math.cos(a) * (1 - .45 * u), 930 + 120 * Math.sin(a) * (1 - .45 * u)];
   }, { dur: 1100, speed: u => .6 + .6 * u, pressure: u => .5 + .3 * Math.sin(u * Math.PI) }));
-  doc.layers.push(slip, metal);
-  doc.active = metal.id;
-  ui.tool = ui.brush = 'metal';
+  doc.layers.push(slip, stone);
+  doc.active = stone.id;
+  ui.tool = ui.brush = 'stone';
 }
 
 /* ════════════════════════════════════════════════════════════════════
