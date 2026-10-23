@@ -30,7 +30,7 @@ The first pass looked like a Photoshop bevel-and-emboss with a drop shadow. Matc
 - iPad gestures: two-finger tap undo, three-finger tap redo, pinch to zoom.
 
 ## Stone (round 3): Comet Pit and Obsidian
-After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface* and *Ominous Obsidian*. A third brush, **Stone**, with one procedural shader. Comet Pit and Obsidian are its presets (plus Pumice, Moon, Basalt, Meteorite in between), so the pill gains one button rather than two.
+After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface* and *Ominous Obsidian*. A third brush, **Stone**, with one procedural shader. Comet Pit is its first preset (plus Ketchup, a glossy red that replaced Obsidian, and Pumice, Moon, Basalt, Meteorite), so the pill gains one button rather than two.
 - The relief sits on top of the existing inflate: every layer returns height and its analytic gradient in doc px, added straight onto the inflate's normal (no extra texture taps).
 - **Pits:** three octaves of craters (big, mid, pores), each a steep-walled bowl with a raised lip, on a lightly warped lattice so the rims come out lumpy. Floors darken (cavity), and craters bite into the silhouette.
 - **Facets:** conchoidal chips. Each Voronoi cell is a gently dished plane with its own tilt, so whole facets flash at once, with faint struck-flint rings. A stretched metric gives elongated chips.
