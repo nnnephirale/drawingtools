@@ -28,3 +28,13 @@ The first pass looked like a Photoshop bevel-and-emboss with a drop shadow. Matc
 - Force Touch trackpad: real pressure via Safari's `webkitmouseforcechanged`.
 - Mouse: no sensor, so speed and dwell stand in (slow = thicker, holding still pools a drop).
 - iPad gestures: two-finger tap undo, three-finger tap redo, pinch to zoom.
+
+## Stone (round 3): Comet Pit and Obsidian
+After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface* and *Ominous Obsidian*. A third brush, **Stone**, with one procedural shader. Comet Pit and Obsidian are its presets (plus Pumice, Moon, Basalt, Meteorite in between), so the pill gains one button rather than two.
+- The relief sits on top of the existing inflate: every layer returns height and its analytic gradient in doc px, added straight onto the inflate's normal (no extra texture taps).
+- **Pits:** three octaves of craters (big, mid, pores), each a steep-walled bowl with a raised lip, on a lightly warped lattice so the rims come out lumpy. Floors darken (cavity), and craters bite into the silhouette.
+- **Facets:** conchoidal chips. Each Voronoi cell is a gently dished plane with its own tilt, so whole facets flash at once, with faint struck-flint rings. A stretched metric gives elongated chips.
+- **Grit:** fine fbm pocking with granular light/dark flecks. **Scale** sizes everything; **Relief** sets depth.
+- **Finish:** Lambert body plus a small studio (softbox, long strip, faint card, dark floor) through Fresnel. Gloss sharpens and strengthens it; the dark floor keeps steep walls black on glossy stone.
+- GPU gotchas: lattice features use an integer hash, because a float hash of `cell + offset + seed` gets reassociated by Metal's fast-math and clips craters along cell lines. The facet search is 5×5 with a stretch-only metric (≤1.6), for the same reason.
+- Source material: Adobe's `.sbsar` files and previews are copied into `dev/materials/` (gitignored, not ours to redistribute). Next: bake their maps in Substance 3D Player, add the Illustrator reference renders to `dev/ref/`, and match in the lab (`?lab=comet` / `?lab=obsidian`).

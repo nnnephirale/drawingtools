@@ -381,6 +381,7 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
       <i class="thumb"></i>
       <button data-tool="slip" title="Slip (B)"><span class="ball" id="ballSlip"></span>Slip</button>
       <button data-tool="metal" title="Metal (B)"><span class="ball" id="ballMetal"></span>Metal</button>
+      <button data-tool="stone" title="Stone (B)"><span class="ball" id="ballStone"></span>Stone</button>
       <button data-tool="erase" title="Eraser (E)">
         <svg class="i" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4-8.5 8.5H6l-1.5-1.5a1.5 1.5 0 010-2.1z"/><path d="M10 18h9"/></svg>Erase
       </button>
@@ -474,6 +475,15 @@ const METAL_PRESETS = [
   { name: 'Oil',      c0: '#0C0D10', c1: '#737981', c2: '#FFFFFF', sky: .38, rim: .84, contrast: 1.05, brk: .15, rough: .06, grain: .5,  iri: .85 },
   { name: 'Comic',    c0: '#0A0A0A', c1: '#8A8A8A', c2: '#FFFFFF', sky: .92, rim: .06, contrast: 1.3,  brk: .95, rough: .1,  grain: .9,  iri: 0 },
 ];
+// after Illustrator's 3D and Materials stones (Comet Pit Surface, Ominous Obsidian), plus in-betweens
+const STONE_PRESETS = [
+  { name: 'Comet Pit', color: '#8E8B86', pits: .85, facets: 0,   grit: .75, scale: 1,   relief: 1,   gloss: .06, shine: .6 },
+  { name: 'Obsidian',  color: '#0B0B0D', pits: 0,   facets: .9,  grit: 0,   scale: 1,   relief: 1,   gloss: .95, shine: 1.2 },
+  { name: 'Pumice',    color: '#CDC6B8', pits: 1,   facets: 0,   grit: .9,  scale: .5,  relief: .8,  gloss: 0,   shine: .4 },
+  { name: 'Moon',      color: '#B7B4AE', pits: .6,  facets: 0,   grit: .45, scale: 1.7, relief: .7,  gloss: .03, shine: .5 },
+  { name: 'Basalt',    color: '#3C3B3A', pits: .3,  facets: .25, grit: .85, scale: .8,  relief: .9,  gloss: .18, shine: .8 },
+  { name: 'Meteorite', color: '#2A2725', pits: .7,  facets: .35, grit: .3,  scale: 1.2, relief: 1,   gloss: .6,  shine: 1 },
+];
 const DEF = {
   slip: {
     size: 40, pressure: .8, speed: .7, tilt: .35, vary: .35, merge: .55, pool: 1, smooth: .35, end: 'drop', taper: 1.2,
@@ -484,9 +494,16 @@ const DEF = {
     c0: '#101215', c1: '#6F757B', c2: '#F6F7F8', sky: .39, rim: .86, contrast: 1, brk: .15, rough: .08, grain: .7, shine: 1, iri: 0,
     vol: 1, edge: 60, light: 300, shadow: 0, preset: 'Chrome',
   },
+  stone: {
+    size: 48, pressure: .8, speed: .6, tilt: .35, vary: .4, merge: .6, pool: .8, smooth: .35, end: 'drop', taper: 1.2,
+    color: '#8E8B86', pits: .85, facets: 0, grit: .75, scale: 1, relief: 1, gloss: .06, shine: .6,
+    vol: 1, edge: 40, light: 120, shadow: 0, preset: 'Comet Pit',
+  },
 };
 const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
-const NAMES = { slip: 'Slip', metal: 'Metal' };
+const BRUSHES = ['slip', 'metal', 'stone'];
+const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone' };
+const PRESETS = { slip: SLIP_PRESETS, metal: METAL_PRESETS, stone: STONE_PRESETS };
 const BGS = [['Paper', '#F4F2EE'], ['Stone', '#E2DFD8'], ['Sand', '#CDBFAD'], ['Slate', '#6F747B'], ['Ink', '#161616'], ['Clear', 'none']];
 const BOARDS = [['4:3', 1600, 1200], ['1:1', 1400, 1400], ['3:4', 1200, 1600], ['16:9', 1920, 1080], ['9:16', 1080, 1920]];
 const mergeA = m => lerp(4.5, 1.32, clamp(m, 0, 1));    // field peak / threshold. Lower peak = longer tails = more fusing
@@ -497,7 +514,7 @@ const ERASE_A = 2.2;
    ════════════════════════════════════════════════════════════════════ */
 let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
 const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
-const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal } };
+const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal }, stone: { ...DEF.stone } };
 const activeLayer = () => doc.layers.find(L => L.id === doc.active) || null;
 const layerById = id => doc.layers.find(L => L.id === id);
 
@@ -576,6 +593,7 @@ uniform vec3 uL;
 uniform int uBrush;
 uniform vec3 uC0, uC1, uC2;
 uniform float uGloss, uShine, uBreak, uSpeckle, uGrain, uRough, uContrast, uIri, uShadow, uShadowDist, uSeed, uSky, uRim;
+uniform float uPits, uFacets, uDScale, uRelief;
 out vec4 o;
 
 vec2 F(vec2 uv){ return texture(uField, uv).rg * uInv; }
@@ -596,6 +614,102 @@ float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32);
 float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
 float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 4; i++){ s += a * vnoise(p); p = p * 2.03 + 17.1; a *= .5; } return s; }
+/* integer hash for lattice features. A float hash of (cell + offset + seed) can differ by a rounding step
+   depending on which neighbouring pixel cell evaluates it (Metal's fast-math reassociates), and that
+   clips craters along cell lines. Integers hash identically from every side. */
+float ihash(ivec2 c, int k){
+  uvec2 q = uvec2(c + ivec2(k * 7919, k * 104729)) * uvec2(1597334673u, 3812015801u);
+  return float(((q.x ^ q.y) * 1597334673u) >> 8) / 16777216.;
+}
+vec2 ihash2(ivec2 c, int k){ return vec2(ihash(c, k), ihash(c, k + 31)); }
+// value noise with its analytic gradient (x = value, yz = d/dp)
+vec3 noised(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.-2.*f), du = 6.*f*(1.-f);
+  float a = hash(i), b = hash(i+vec2(1,0)), c = hash(i+vec2(0,1)), d = hash(i+vec2(1,1));
+  return vec3(a + (b-a)*u.x + (c-a)*u.y + (a-b-c+d)*u.x*u.y, du * (vec2(b-a, c-a) + (a-b-c+d)*u.yx)); }
+
+/* Stone relief, after Illustrator's Comet Pit Surface and Ominous Obsidian. Every layer returns
+   height (doc px) and its gradient, so it adds straight onto the inflate's normal with no extra taps. */
+// craters: some cells hold a steep-walled bowl with a raised lip. w = how deep inside a bowl (0..1)
+vec4 craters(vec2 p, float cs, float dens, float depth, int s){
+  vec2 g = p / cs, f = fract(g);
+  ivec2 i = ivec2(floor(g));
+  vec4 acc = vec4(0.);
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    ivec2 id = i + ivec2(x, y);
+    vec2 o = vec2(x, y);
+    float on = step(ihash(id, s + 7), dens);
+    vec2 d = f - o - (.15 + .7 * ihash2(id, s));
+    float r = mix(.2, .55, ihash(id, s + 3));
+    float l = length(d), u = l / r, inb = step(u, 1.);
+    float lip = exp(-(u - 1.) * (u - 1.) / .05);
+    float hh = inb * (.5 * (u*u + u*u*u*u) - 1.) + .28 * lip;
+    float dh = inb * (u + 2. * u*u*u) - .28 * lip * 2. * (u - 1.) / .05;
+    acc.x += on * hh * r * cs * depth;
+    acc.yz += on * dh * depth * d / max(l, 1e-4);
+    acc.w = max(acc.w, on * inb * (1. - u*u));
+  }
+  return acc;
+}
+// conchoidal fracture: each cell is a shallow elongated scoop (height ∝ squared distance to its centre),
+// so neighbouring scoops meet in sharp ridges, with faint rings like a struck flint. w = 0 at a scoop centre.
+// The metric only ever stretches (e ≥ 1, capped at 1.6), which keeps the true nearest scoop inside a 5×5 search:
+// a narrower search lets a far, stretched scoop win in some cells and not others, leaving straight seams.
+vec4 scoops(vec2 p, float cs, float depth, int s){
+  vec2 g = p / cs, f = fract(g);
+  ivec2 i = ivec2(floor(g));
+  float d1 = 99.; vec2 v1 = vec2(0.), tl = vec2(0.);
+  for (int y = -2; y <= 2; y++) for (int x = -2; x <= 2; x++) {
+    ivec2 id = i + ivec2(x, y);
+    vec2 o = vec2(x, y);
+    vec2 d = f - o - (.1 + .8 * ihash2(id, s));
+    float an = ihash(id, s + 9) * 6.2832, e = mix(1., 1.6, ihash(id, s + 5));
+    mat2 Rm = mat2(cos(an), sin(an), -sin(an), cos(an));
+    vec2 q = Rm * d; q.x *= e;
+    float dd = dot(q, q);
+    if (dd < d1) { d1 = dd; v1 = 2. * transpose(Rm) * vec2(q.x * e, q.y); tl = ihash2(id, s + 13) * 2. - 1.; }
+  }
+  // each chip is a gently dished plane with its own tilt, so whole facets flash at once like struck glass
+  float sq = sqrt(d1) + 1e-4, ring = .0015 * cs * depth;
+  vec2 gr = v1 * depth * .55 + tl * depth * .9 + ring * cos(sq * 22.) * 22. * v1 / (2. * sq) / cs;
+  return vec4(d1 * cs * depth + ring * sin(sq * 22.), gr, d1);
+}
+vec3 stoneRelief(vec2 p, out float cav, out float bite){
+  float sc = uDScale, s = uSeed * 7.;
+  int si = int(uSeed * 97.);
+  vec3 r = vec3(0.); cav = 0.; bite = 0.;
+  if (uPits > 0.) {
+    // warp the crater lattice so bowls come out lumpy and irregular rather than machined circles
+    vec2 wq = p / (14. * sc) + s;
+    vec2 cp = p + 6. * sc * (vec2(fbm(wq), fbm(wq + 8.3)) - .5);
+    vec4 a = craters(cp, 58. * sc, .6 * uPits, .8, si);
+    vec4 b = craters(cp + 31.7, 21. * sc, .45 * uPits, .7, si + 101);
+    vec4 c = craters(cp + 77.1, 6. * sc, .22 * uPits, 1.1, si + 211);
+    r += a.xyz + b.xyz + c.xyz;
+    cav = max(max(a.w, b.w * .85), c.w);
+    bite += uPits * .45 * max(a.w, b.w * .6);
+  }
+  if (uFacets > 0.) {
+    vec2 wp = p + 12. * sc * (vec2(vnoise(p / (70. * sc) + s), vnoise(p / (70. * sc) + s + 5.2)) - .5);
+    vec4 a = scoops(wp, 90. * sc, .55 * uFacets, si + 307);
+    vec4 b = scoops(wp + 13.3, 30. * sc, .3 * uFacets, si + 401);
+    r += a.xyz + b.xyz * .3;
+    bite += uFacets * .3 * (1. - smoothstep(0., .3, a.w));
+  }
+  if (uGrain > 0.) {                                                // grit: a few octaves of fine pocking
+    float fq = 1. / (5. * sc), amp = 1.8 * sc * uGrain;
+    for (int k = 0; k < 4; k++) { vec3 n = noised(p * fq + s + float(k) * 13.7); r += vec3(n.x * amp, n.yz * amp * fq); fq *= 2.1; amp *= .5; }
+  }
+  return r * vec3(uRelief, uRelief, uRelief);
+}
+// a small studio for glossy stone: one softbox along the light, a long strip, a faint card opposite, dim ceiling
+float stoneEnv(vec3 Rr, vec3 L, float g){
+  float key = smoothstep(mix(.55, .93, g), mix(.75, .975, g), dot(Rr, L));
+  vec2 Lxy = normalize(L.xy + 1e-5);
+  float az = dot(normalize(Rr.xy + 1e-5), Lxy);
+  float strip = (1. - smoothstep(0., mix(.3, .05, g), abs(Rr.z - L.z))) * smoothstep(.3, .9, az);
+  float card = smoothstep(.2, .9, -az) * (1. - smoothstep(0., .3, abs(Rr.z - .35))) * .15;
+  return key * 1.6 + strip * .7 + card + .025 * max(Rr.z, 0.) + .004;   // dark floor: steep walls stay black
+}
 
 void main(){
   lnA = log(uA);
@@ -615,7 +729,10 @@ void main(){
     shA = clamp(max(smoothstep(.06, 1.3, rs) * .5, smoothstep(.3, 1., R) * .28) * uShadow, 0., 1.);
   }
 
-  float a = clamp((R - 1.) / (fw * 1.5) + .5, 0., 1.);
+  // stone relief is needed before coverage: craters and scoops chip the silhouette
+  vec3 rel = vec3(0.); float cav = 0., bite = 0.;
+  if (uBrush == 2 && R > .6) rel = stoneRelief(doc, cav, bite);
+  float a = clamp((R - bite - 1.) / (fw * 1.5) + .5, 0., 1.);
   if (a <= 0. && shA < .002) { o = vec4(0.); return; }
 
   vec3 col = vec3(0.);
@@ -666,6 +783,21 @@ void main(){
       col += glint * smoothstep(.55, .95, uGloss) * uShine * .5;        // crisp glint only on real glazes
       float away = clamp(-dot(normalize(N.xy + 1e-5), Lxy), 0., 1.);
       col += alb * .07 * smoothstep(.55, 1., 1. - N.z) * away;      // bounce light on the shadow rim
+    } else if (uBrush == 2) {
+      // ── stone: comet pit / obsidian ──
+      N = normalize(vec3(N0.xy / N0.z - rel.yz, 1.));
+      float mott = fbm(doc / (16. * uDScale) + uSeed) - .5;
+      float fleck = hash(floor(doc / 1.6) + uSeed) - .5;            // granular light and dark flecks
+      vec3 alb = uC0 * (1. + mott * .5 * uGrain + gn * .1 * uGrain + fleck * .4 * uGrain);
+      alb *= 1. - cav * .65;                                         // crater floors sit in shadow and dust
+      float ndl = dot(N, L);
+      float diff = clamp((ndl + .08) / 1.08, 0., 1.);
+      float amb = .12 + .22 * N.z;
+      col = alb * (amb * (1. - cav * .5) + 1.3 * diff);
+      vec3 Rr = reflect(-V, N);
+      float fres = .04 + .96 * pow(1. - clamp(N.z, 0., 1.), 5.);
+      float spec = stoneEnv(Rr, L, uGloss) * fres * mix(.2, 14., uGloss * uGloss);
+      col += spec * uShine * (1. - cav * .7);
     } else {
       // ── liquid metal ──
       vec2 np = doc / 6. + uSeed;
@@ -1059,15 +1191,17 @@ function drawLayer(L, tex, target, tw, th) {
     gl.uniform2f(u.uRes, tw, th); gl.uniform2f(u.uDoc, doc.w, doc.h);
     gl.uniform1f(u.uInv, 1 / FIELD.scale);
     gl.uniform1f(u.uA, mergeA(P.merge)); gl.uniform1f(u.uVol, P.vol);
-    gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, L.brush === 'metal' ? 0 : .5);
+    const metal = L.brush === 'metal', stone = L.brush === 'stone';
+    gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, metal ? 0 : stone ? .3 : .5);
     gl.uniform1f(u.uSky, P.sky ?? .3); gl.uniform1f(u.uRim, P.rim ?? .85);
-    const Ld = lightDir(P.light, L.brush === 'metal' ? .44 : .66); gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
-    const metal = L.brush === 'metal';
-    gl.uniform1i(u.uBrush, metal ? 1 : 0);
+    const Ld = lightDir(P.light, metal ? .44 : stone ? .6 : .66); gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
+    gl.uniform1i(u.uBrush, metal ? 1 : stone ? 2 : 0);
+    gl.uniform1f(u.uPits, stone ? P.pits : 0); gl.uniform1f(u.uFacets, stone ? P.facets : 0);
+    gl.uniform1f(u.uDScale, P.scale ?? 1); gl.uniform1f(u.uRelief, P.relief ?? 1);
     const c0 = lin(hexRgb(metal ? P.c0 : P.color)), c1 = metal ? lin(hexRgb(P.c1)) : [0, 0, 0], c2 = metal ? lin(hexRgb(P.c2)) : [0, 0, 0];
     gl.uniform3f(u.uC0, ...c0); gl.uniform3f(u.uC1, ...c1); gl.uniform3f(u.uC2, ...c2);
     gl.uniform1f(u.uGloss, P.gloss ?? 0); gl.uniform1f(u.uShine, P.shine ?? 1); gl.uniform1f(u.uBreak, P.brk ?? 0);
-    gl.uniform1f(u.uSpeckle, P.speckle ?? 0); gl.uniform1f(u.uGrain, P.grain ?? 0); gl.uniform1f(u.uRough, P.rough ?? 0);
+    gl.uniform1f(u.uSpeckle, P.speckle ?? 0); gl.uniform1f(u.uGrain, (stone ? P.grit : P.grain) ?? 0); gl.uniform1f(u.uRough, P.rough ?? 0);
     gl.uniform1f(u.uContrast, P.contrast ?? 1); gl.uniform1f(u.uIri, P.iri ?? 0);
     gl.uniform1f(u.uShadow, P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
     gl.uniform1f(u.uSeed, L.seed || 0);
@@ -1254,7 +1388,7 @@ function load() {
     if (!d || d.v !== 1 || !Array.isArray(d.layers)) return false;
     doc = { w: d.w, h: d.h, bg: d.bg, bgImage: null, active: d.active,
       layers: d.layers.map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) };
-    if (d.last) for (const b of ['slip', 'metal']) Object.assign(lastParams[b], d.last[b] || {});
+    if (d.last) for (const b of BRUSHES) Object.assign(lastParams[b], d.last[b] || {});
     if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
     if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
     if (!activeLayer() && doc.layers.length) doc.active = doc.layers[doc.layers.length - 1].id;
@@ -1428,7 +1562,7 @@ addEventListener('keydown', e => {
     else { const L = activeLayer(); if (L) setParam(L, 'size', clamp(Math.round(L.params.size * f), 2, 140)); }
     refreshControls(); return;
   }
-  if (k === 'b') setTool(ui.tool === 'slip' ? 'metal' : ui.tool === 'metal' ? 'slip' : ui.brush);
+  if (k === 'b') setTool(ui.tool === 'erase' ? ui.brush : BRUSHES[(BRUSHES.indexOf(ui.tool) + 1) % BRUSHES.length]);
   else if (k === 'e') setTool(ui.tool === 'erase' ? ui.brush : 'erase');
   else if (k === 's') togglePanel();
   else if (k === 'escape') togglePanel(false);
@@ -1471,24 +1605,24 @@ function showTab(name) {
   save();
 }
 
-function ballCss(L) {
-  const P = L ? L.params : null;
-  if (!P) return '';
-  if (L.brush === 'metal') {
-    return `radial-gradient(circle at 34% 30%, ${P.c2} 0 12%, ${P.c1} 38%, ${P.c0} 72%, ${P.c1} 100%)`;
-  }
-  const c = hexRgb(P.color), lo = toHex(c.map(v => v * .62)), hi = toHex(mix3(c, [1, 1, 1], .55));
-  return `radial-gradient(circle at 34% 30%, #fff 0 7%, ${hi} 16%, ${P.color} 46%, ${lo} 100%)`;
-}
+const ballCss = L => L && L.params ? presetBall(L.brush, L.params) : '';
 function presetBall(brush, pr) {
   if (brush === 'metal') return `radial-gradient(circle at 34% 30%, ${pr.c2} 0 12%, ${pr.c1} 38%, ${pr.c0} 72%, ${pr.c1} 100%)`;
   const c = hexRgb(pr.color), lo = toHex(c.map(v => v * .62)), hi = toHex(mix3(c, [1, 1, 1], .55));
+  if (brush === 'stone') {
+    // a few dark pits for craters; a hard white glint for glossy stone
+    const pit = (x, y, r) => `radial-gradient(circle at ${x}% ${y}%, rgba(0,0,0,${.18 + .3 * pr.pits}) 0 ${r}%, transparent ${r + 2}%)`;
+    const pits = pr.pits > .2 ? [pit(62, 58, 10), pit(36, 68, 7), pit(68, 30, 6)].join(',') + ',' : '';
+    const glint = pr.gloss > .4 ? `radial-gradient(circle at 34% 30%, #fff 0 6%, transparent 9%),` : '';
+    const mid = toHex(mix3(c, [1, 1, 1], pr.gloss > .4 ? .12 : .3));
+    return `${glint}${pits}radial-gradient(circle at 34% 30%, ${mid} 0 18%, ${pr.color} 52%, ${toHex(c.map(v => v * .5))} 100%)`;
+  }
   return `radial-gradient(circle at 34% 30%, #fff 0 7%, ${hi} 16%, ${pr.color} 46%, ${lo} 100%)`;
 }
 function updateBalls() {
-  for (const b of ['slip', 'metal']) {
+  for (const b of BRUSHES) {
     const L = [...doc.layers].reverse().find(l => l.brush === b && l.id === doc.active) || [...doc.layers].reverse().find(l => l.brush === b);
-    $(b === 'slip' ? '#ballSlip' : '#ballMetal').style.background = ballCss(L || { brush: b, params: lastParams[b] });
+    $('#ball' + NAMES[b]).style.background = ballCss(L || { brush: b, params: lastParams[b] });
   }
 }
 function updatePill() {
@@ -1665,7 +1799,7 @@ function renderPanel() {
 
   // Surface
   const sp = pane('surface'); sp.replaceChildren();
-  const presets = brush === 'metal' ? METAL_PRESETS : SLIP_PRESETS;
+  const presets = PRESETS[brush];
   const mats = h('div', { class: 'mats' });
   for (const pr of presets) {
     mats.append(h('button', { type: 'button', class: 'mat', 'data-name': pr.name, onclick: () => {
@@ -1682,6 +1816,12 @@ function renderPanel() {
       ...[['sky', 'Top', 0, 1, .01], ['rim', 'Edge tone', 0, 1, .01], ['contrast', 'Contrast', .4, 2, .01], ['brk', 'Banding', 0, 1, .01]].map(ps),
       sec('Finish'),
       ...[['shine', 'Shine', 0, 2, .01], ['grain', 'Grain', 0, 1, .01], ['rough', 'Ripple', 0, 1, .01], ['iri', 'Iridescence', 0, 1, .01]].map(ps));
+  } else if (brush === 'stone') {
+    sp.append(sec('Colour'), colorRow('Stone', () => P.color, set('color')),
+      sec('Texture'),
+      ...[['pits', 'Pits', 0, 1, .01], ['facets', 'Facets', 0, 1, .01], ['grit', 'Grit', 0, 1, .01], ['scale', 'Scale', .3, 3, .01], ['relief', 'Relief', 0, 2, .01]].map(ps),
+      sec('Finish'),
+      ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01]].map(ps));
   } else {
     sp.append(sec('Colour'), colorRow('Glaze', () => P.color, set('color')),
       sec('Finish'),
@@ -1723,7 +1863,7 @@ function renderPanel() {
       h('button', { type: 'button', class: 'btn quiet', onclick: clearAll }, 'Clear all')),
     hint(isTouchUI
       ? 'Two-finger tap to undo, three-finger tap to redo. Pinch to zoom. Once a Pencil touches the screen, fingers only navigate.'
-      : '<kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>[</kbd> <kbd>]</kbd> size · <kbd>B</kbd> slip/metal · <kbd>E</kbd> eraser · hold <kbd>Space</kbd> to pan · <kbd>⌘</kbd>+scroll to zoom · <kbd>S</kbd> panel'));
+      : '<kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo · <kbd>[</kbd> <kbd>]</kbd> size · <kbd>B</kbd> next brush · <kbd>E</kbd> eraser · hold <kbd>Space</kbd> to pan · <kbd>⌘</kbd>+scroll to zoom · <kbd>S</kbd> panel'));
   renderLayers();
   showTab(ui.tab);
 }
