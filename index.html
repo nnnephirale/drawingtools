@@ -57,6 +57,14 @@ button{font-family:inherit;touch-action:manipulation}
 }
 .board.easing{transition:transform .45s var(--ease)}
 .board canvas{display:block;width:100%;height:100%;border-radius:inherit;touch-action:none}
+/* 3D: the board becomes a window-sized view onto the relief (the camera keeps it where the 2D board was) */
+.board.three{
+  position:fixed;inset:0;width:auto!important;height:auto!important;transform:none!important;
+  border-radius:0;box-shadow:none;background:none!important;cursor:grab;
+}
+.board.three.grabbing{cursor:grabbing}
+.board.three canvas{filter:drop-shadow(0 22px 30px rgba(0,0,0,.13))}
+.board.three .guides,.board.three .empty{display:none}
 .board.nocursor{cursor:none}
 .board.grab{cursor:grab}
 .guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
@@ -181,6 +189,8 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
   body:has(.panel:not([hidden-state])) .pill{opacity:0;pointer-events:none;transform:translateX(-50%) translateY(12px)}
   .tools button{padding:0 10px 0 9px;letter-spacing:.08em}
 }
+/* phones: four tools plus undo/redo only fit as icons (balls for the brushes) */
+@media (max-width:440px){ .tools button{font-size:0;gap:0;padding:0 12px} }
 /* The panel floats over the artboard as see-through frosted glass (the canvas no longer shifts when it opens).
    Legibility comes from the backdrop filter, not an opaque fill: it softens the contrast of whatever is behind
    and lifts it a touch, so dark strokes turn into a mid-tone haze. Tracks and cards are light frost chips,
@@ -440,6 +450,9 @@ svg.i{width:17px;height:17px;stroke:currentColor;stroke-width:1.3;fill:none;stro
       <button data-tool="erase" title="Eraser (E)">
         <svg class="i" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4-8.5 8.5H6l-1.5-1.5a1.5 1.5 0 010-2.1z"/><path d="M10 18h9"/></svg>Erase
       </button>
+      <button data-tool="view" title="3D view (3)">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 3.5l7.5 4.2v8.6L12 20.5l-7.5-4.2V7.7z"/><path d="M4.5 7.7L12 12l7.5-4.3M12 12v8.5"/></svg>3D
+      </button>
     </div>
     <span class="psep"></span>
     <button class="pi" id="undo" title="Undo (⌘Z)"><svg class="i" viewBox="0 0 24 24"><path d="M9 7L5 11l4 4"/><path d="M5 11h9a5 5 0 010 10h-2"/></svg></button>
@@ -572,10 +585,11 @@ const ERASE_A = 2.2;
    state
    ════════════════════════════════════════════════════════════════════ */
 let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
-const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
+const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 3, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
 const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal }, stone: { ...DEF.stone } };
 const activeLayer = () => doc.layers.find(L => L.id === doc.active) || null;
 const layerById = id => doc.layers.find(L => L.id === id);
+const brushTool = () => ui.tool !== 'erase' && ui.tool !== 'view';
 
 function newLayer(brush, params) {
   const n = doc.layers.filter(L => L.brush === brush).length + 1;
@@ -641,20 +655,12 @@ void main(){ o = uImg == 1 ? vec4(texture(uTex, vec2(vUv.x, 1. - vUv.y)).rgb, 1.
 /* The material shader. The field texture holds R = summed gaussian density, G = density-weighted radius.
    Surface = where R > 1. From R we recover the distance to the silhouette, then build the height as a
    quarter-circle bevel of radius Edge: thin lines come out round, wide pools and merges go flat on top,
-   like a liquid held by surface tension (the reference brushes' puddles). */
-const FS_COMP = `#version 300 es
-precision highp float;
-in vec2 vUv;
+   like a liquid held by surface tension (the reference brushes' puddles).
+   The height is shared with the 3D view's mesh and the model export, so it lives in its own chunk. */
+const GL_H = `
+precision highp sampler2D;
 uniform sampler2D uField;
-uniform vec2 uRes, uDoc;
-uniform float uInv, uA, uVol, uBevel, uBulge;
-uniform vec3 uL;
-uniform int uBrush;
-uniform vec3 uC0, uC1, uC2;
-uniform float uGloss, uShine, uBreak, uSpeckle, uGrain, uRough, uContrast, uIri, uShadow, uShadowDist, uSeed, uSky, uRim;
-uniform float uPits, uFacets, uDScale, uRelief;
-out vec4 o;
-
+uniform float uInv, uA, uBevel, uBulge;
 vec2 F(vec2 uv){ return texture(uField, uv).rg * uInv; }
 float lnA;
 // 0 at the silhouette, 1 on the ridge of a lone line (exact for a straight gaussian ridge)
@@ -669,6 +675,34 @@ float H(vec2 uv){
   float t = min(d / B, 1.);
   return B * sqrt(1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3;
 }
+/* The same form for geometry. The bevel above meets the board with a vertical wall, which a grid can't follow:
+   one vertex outside, the next already high, and the silhouette lands at a different height in every cell
+   (a comb along each stroke once tilted). Here the wall has a finite slope and carries on below the board
+   outside the stroke (the distance is signed), so every triangle crosses zero right at the silhouette. */
+float Hg(vec2 uv){
+  vec2 f = F(uv);
+  if (f.x <= .02) return -2. * uBevel;
+  float rad = f.y / f.x * 64.;
+  float over = max(f.x / uA - 1., 0.);
+  float B = max(min(rad, uBevel), .5);
+  float t = clamp((innerE(f.x) * rad + over * rad * .6) / B, -1., 1.);
+  return B * (t < 0. ? 2. * t : 1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3;
+}`;
+// mesh = the 3D view: V comes from the real camera, and a depth pre-pass (uPass 0) lays down the solid part
+const fsComp = mesh => `#version 300 es
+precision highp float;
+in vec2 vUv;
+${mesh ? 'in vec3 vP; uniform vec3 uCam; uniform int uPass;' : ''}
+${GL_H}
+uniform vec2 uRes, uDoc;
+uniform float uVol;
+uniform vec3 uL;
+uniform int uBrush;
+uniform vec3 uC0, uC1, uC2;
+uniform float uGloss, uShine, uBreak, uSpeckle, uGrain, uRough, uContrast, uIri, uShadow, uShadowDist, uSeed, uSky, uRim;
+uniform float uPits, uFacets, uDScale, uRelief;
+out vec4 o;
+
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
@@ -792,6 +826,7 @@ void main(){
   vec3 rel = vec3(0.); float cav = 0., bite = 0.;
   if (uBrush == 2 && R > .6) rel = stoneRelief(doc, cav, bite);
   float a = clamp((R - bite - 1.) / (fw * 1.5) + .5, 0., 1.);
+  ${mesh ? 'if (uPass == 0) { if (a < .5) discard; o = vec4(0.); return; }' : ''}
   if (a <= 0. && shA < .002) { o = vec4(0.); return; }
 
   vec3 col = vec3(0.);
@@ -802,7 +837,7 @@ void main(){
     float hu = H(uv + vec2(0., t.y)), hd = H(uv - vec2(0., t.y));
     vec3 N0 = normalize(vec3(-(hR - hl) / tDoc * uVol, -(hd - hu) / tDoc * uVol, 1.));
     vec3 N = N0;
-    vec3 L = uL, V = vec3(0., 0., 1.);
+    vec3 L = uL, V = ${mesh ? 'normalize(uCam - vP)' : 'vec3(0., 0., 1.)'};
     vec2 Lxy = normalize(L.xy + vec2(1e-5));
     float rad = c.y / max(c.x, 1e-4) * 64.;
     float e0 = innerE(max(R, 1.0001));
@@ -900,6 +935,51 @@ void main(){
   o = vec4(srgb * a, a + (1. - a) * shA);
 }`;
 
+/* 3D view. Each layer is a grid lifted by its own height (× Depth) and stood on the layers below it
+   (uStack holds their summed heights). Positions are doc px with z towards the viewer. */
+const VS_MESH = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aUv;
+${GL_H}
+uniform sampler2D uStack;
+uniform int uHasStack;
+uniform mat4 uMVP;
+uniform vec2 uDoc;
+uniform float uVol, uDepth, uLift;
+out vec2 vUv; out vec3 vP;
+void main(){
+  lnA = log(uA);
+  vUv = aUv;
+  float z = Hg(aUv) * uVol * uDepth + uLift;
+  if (uHasStack == 1) z += texture(uStack, aUv).r;
+  vP = vec3(aUv.x * uDoc.x, (1. - aUv.y) * uDoc.y, z);
+  gl_Position = uMVP * vec4(vP, 1.);
+}`;
+// one layer's height × uK: raw into a float target (the stack), or packed into 16 bits of RGBA8 for reading back
+const FS_HGT = `#version 300 es
+precision highp float; in vec2 vUv;
+${GL_H}
+uniform float uK, uEnc; out vec4 o;
+void main(){
+  lnA = log(uA);
+  float hh = max(Hg(vUv), 0.) * uK;
+  if (uEnc > 0.) { float x = floor(clamp(hh / uEnc, 0., 1.) * 65535. + .5), hi = floor(x / 256.); o = vec4(hi / 255., (x - hi * 256.) / 255., 0., 1.); }
+  else o = vec4(hh, 0., 0., 0.);
+}`;
+// the artboard as a slab: the top face is the background exactly as in 2D, the sides shade with the light
+const VS_SLAB = `#version 300 es
+layout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec2 aUv;
+uniform mat4 uMVP; out vec3 vN; out vec2 vUv;
+void main(){ vN = aN; vUv = aUv; gl_Position = uMVP * vec4(aP, 1.); }`;
+const FS_SLAB = `#version 300 es
+precision highp float; in vec3 vN; in vec2 vUv;
+uniform vec3 uBg, uL; uniform int uImg; uniform sampler2D uTex; out vec4 o;
+void main(){
+  vec3 c = uImg == 1 ? texture(uTex, vUv).rgb : uBg;
+  float s = vN.z > .5 ? 1. : .62 + .3 * max(dot(vN, uL), 0.);
+  o = vec4(c * s, 1.);
+}`;
+
 function compile(type, src) {
   const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
@@ -919,7 +999,10 @@ const PR = {
   copy: program(VS_FULL, FS_COPY),
   erase: program(VS_FULL, FS_ERASE),
   bg: program(VS_FULL, FS_BG),
-  comp: program(VS_FULL, FS_COMP),
+  comp: program(VS_FULL, fsComp(false)),
+  mesh: program(VS_MESH, fsComp(true)),
+  hgt: program(VS_FULL, FS_HGT),
+  slab: program(VS_SLAB, FS_SLAB),
 };
 
 // stamp geometry: one quad, instanced per stamp
@@ -1242,30 +1325,39 @@ function lightDir(deg, el = .66) {
   const a = deg * Math.PI / 180;
   return [Math.cos(a) * Math.cos(el), -Math.sin(a) * Math.cos(el), Math.sin(el)];
 }
-function drawLayer(L, tex, target, tw, th) {
+// the uniforms of the shared height chunk (GL_H), with the layer's field on unit 0
+function hUniforms(u, L, tex) {
   const P = L.params;
+  bindTex(0, tex); gl.uniform1i(u.uField, 0);
+  gl.uniform1f(u.uInv, 1 / FIELD.scale);
+  gl.uniform1f(u.uA, mergeA(P.merge));
+  gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, L.brush === 'metal' ? 0 : L.brush === 'stone' ? .3 : .5);
+}
+function drawLayer(L, tex, target, tw, th) {
   gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  fullscreen(PR.comp, target, u => {
-    bindTex(0, tex); gl.uniform1i(u.uField, 0);
-    gl.uniform2f(u.uRes, tw, th); gl.uniform2f(u.uDoc, doc.w, doc.h);
-    gl.uniform1f(u.uInv, 1 / FIELD.scale);
-    gl.uniform1f(u.uA, mergeA(P.merge)); gl.uniform1f(u.uVol, P.vol);
-    const metal = L.brush === 'metal', stone = L.brush === 'stone';
-    gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, metal ? 0 : stone ? .3 : .5);
-    gl.uniform1f(u.uSky, P.sky ?? .3); gl.uniform1f(u.uRim, P.rim ?? .85);
-    const Ld = lightDir(P.light, metal ? .44 : stone ? .6 : .66); gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
-    gl.uniform1i(u.uBrush, metal ? 1 : stone ? 2 : 0);
-    gl.uniform1f(u.uPits, stone ? P.pits : 0); gl.uniform1f(u.uFacets, stone ? P.facets : 0);
-    gl.uniform1f(u.uDScale, P.scale ?? 1); gl.uniform1f(u.uRelief, P.relief ?? 1);
-    const c0 = lin(hexRgb(metal ? P.c0 : P.color)), c1 = metal ? lin(hexRgb(P.c1)) : [0, 0, 0], c2 = metal ? lin(hexRgb(P.c2)) : [0, 0, 0];
-    gl.uniform3f(u.uC0, ...c0); gl.uniform3f(u.uC1, ...c1); gl.uniform3f(u.uC2, ...c2);
-    gl.uniform1f(u.uGloss, P.gloss ?? 0); gl.uniform1f(u.uShine, P.shine ?? 1); gl.uniform1f(u.uBreak, P.brk ?? 0);
-    gl.uniform1f(u.uSpeckle, P.speckle ?? 0); gl.uniform1f(u.uGrain, (stone ? P.grit : P.grain) ?? 0); gl.uniform1f(u.uRough, P.rough ?? 0);
-    gl.uniform1f(u.uContrast, P.contrast ?? 1); gl.uniform1f(u.uIri, P.iri ?? 0);
-    gl.uniform1f(u.uShadow, P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
-    gl.uniform1f(u.uSeed, L.seed || 0);
-  });
+  fullscreen(PR.comp, target, u => layerUniforms(u, L, tex, tw, th));
   gl.disable(gl.BLEND);
+}
+// every material uniform; returns the light direction so the 3D view can turn it into the drawing's frame
+function layerUniforms(u, L, tex, tw, th) {
+  const P = L.params;
+  hUniforms(u, L, tex);
+  gl.uniform2f(u.uRes, tw, th); gl.uniform2f(u.uDoc, doc.w, doc.h);
+  gl.uniform1f(u.uVol, P.vol);
+  const metal = L.brush === 'metal', stone = L.brush === 'stone';
+  gl.uniform1f(u.uSky, P.sky ?? .3); gl.uniform1f(u.uRim, P.rim ?? .85);
+  const Ld = lightDir(P.light, metal ? .44 : stone ? .6 : .66); gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
+  gl.uniform1i(u.uBrush, metal ? 1 : stone ? 2 : 0);
+  gl.uniform1f(u.uPits, stone ? P.pits : 0); gl.uniform1f(u.uFacets, stone ? P.facets : 0);
+  gl.uniform1f(u.uDScale, P.scale ?? 1); gl.uniform1f(u.uRelief, P.relief ?? 1);
+  const c0 = lin(hexRgb(metal ? P.c0 : P.color)), c1 = metal ? lin(hexRgb(P.c1)) : [0, 0, 0], c2 = metal ? lin(hexRgb(P.c2)) : [0, 0, 0];
+  gl.uniform3f(u.uC0, ...c0); gl.uniform3f(u.uC1, ...c1); gl.uniform3f(u.uC2, ...c2);
+  gl.uniform1f(u.uGloss, P.gloss ?? 0); gl.uniform1f(u.uShine, P.shine ?? 1); gl.uniform1f(u.uBreak, P.brk ?? 0);
+  gl.uniform1f(u.uSpeckle, P.speckle ?? 0); gl.uniform1f(u.uGrain, (stone ? P.grit : P.grain) ?? 0); gl.uniform1f(u.uRough, P.rough ?? 0);
+  gl.uniform1f(u.uContrast, P.contrast ?? 1); gl.uniform1f(u.uIri, P.iri ?? 0);
+  gl.uniform1f(u.uShadow, P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
+  gl.uniform1f(u.uSeed, L.seed || 0);
+  return Ld;
 }
 function compositeScreen() {
   drawBg(null, false);
@@ -1273,6 +1365,263 @@ function compositeScreen() {
     if (!L.visible) continue;
     const tex = drawing && drawing.L === L ? T.live.tex : layerTarget(L).tex;
     drawLayer(L, tex, null, T.w, T.h);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   3D view: the height field as a relief you can turn
+   ════════════════════════════════════════════════════════════════════ */
+// Object space is doc px (x right, y down) with z towards the viewer; the camera sees it through a y flip.
+// At rx = ry = 0 the board lands exactly where the 2D board sits, so entering and leaving can glide.
+const three = { on: false, leaving: false, rx: 0, ry: 0, zoom: 1, panX: 0, panY: 0, vrx: 0, vry: 0, anim: null, t: 0 };
+const POSE = { rx: -.62, ry: .38, zoom: .8, panX: 0, panY: 0 };
+const POSE_KEYS = Object.keys(POSE);
+const TILT = 1.35;          // ±77°: past that you'd be looking at the slab's edge
+const SLAB = .025;          // slab thickness, as a fraction of the board's width (also the printed base)
+const FOV = .5;
+const M4 = {
+  mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; },
+  persp(fy, asp, n, f) { const t = 1 / Math.tan(fy / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); },
+  tr(x, y, z) { return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]); },
+  sc(x, y, z) { return new Float32Array([x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1]); },
+  rx(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]); },
+  ry(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+};
+function camera3D(w, hgt) {
+  const vw = innerWidth, vh = innerHeight, sr = stage.getBoundingClientRect();
+  const dist = doc.h * vh / Math.max(1, cssH) / (2 * Math.tan(FOV / 2)) / three.zoom;
+  const ext = Math.hypot(doc.w, doc.h) * .6 + doc.w * .1;
+  const near = Math.max(dist * .05, dist - ext), far = dist + ext;
+  const ox = (sr.left + sr.width / 2 + three.panX - vw / 2) * 2 / vw, oy = -(sr.top + sr.height / 2 + three.panY - vh / 2) * 2 / vh;
+  let m = M4.tr(-doc.w / 2, -doc.h / 2, 0);
+  for (const n of [M4.sc(1, -1, 1), M4.ry(three.ry), M4.rx(three.rx), M4.tr(0, 0, -dist), M4.persp(FOV, w / hgt, near, far), M4.tr(ox, oy, 0)]) m = M4.mul(n, m);
+  // (R = Rx·Ry)ᵀ takes a camera-space direction back into the drawing's frame
+  const cx = Math.cos(three.rx), sx = Math.sin(three.rx), cy = Math.cos(three.ry), sy = Math.sin(three.ry);
+  const rotT = ([x, y, z]) => { const y1 = cx * y + sx * z, z1 = -sx * y + cx * z; return [cy * x - sy * z1, y1, sy * x + cy * z1]; };
+  const toObj = v => { const r = rotT([v[0], -v[1], v[2]]); return [r[0], -r[1], r[2]]; };
+  const e = rotT([0, 0, dist]);
+  return { mvp: m, eye: [e[0] + doc.w / 2, -e[1] + doc.h / 2, e[2]], toObj };
+}
+
+// one grid shared by every layer, ~512 cells on the long side
+let grid = null;
+function ensureGrid() {
+  const cell = Math.max(doc.w, doc.h) / 512, nx = Math.ceil(doc.w / cell), ny = Math.ceil(doc.h / cell);
+  if (grid && grid.nx === nx && grid.ny === ny) return grid;
+  if (grid) { gl.deleteVertexArray(grid.vao); gl.deleteBuffer(grid.vb); gl.deleteBuffer(grid.ib); }
+  const uv = new Float32Array((nx + 1) * (ny + 1) * 2), idx = new Uint32Array(nx * ny * 6);
+  for (let j = 0, k = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) { uv[k++] = i / nx; uv[k++] = 1 - j / ny; }
+  for (let j = 0, k = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
+    idx[k++] = a; idx[k++] = c; idx[k++] = b; idx[k++] = b; idx[k++] = c; idx[k++] = d;
+  }
+  const vao = gl.createVertexArray(), vb = gl.createBuffer(), ib = gl.createBuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return grid = { nx, ny, vao, vb, ib, n: idx.length };
+}
+// the board as a box: top face at z = 0, four sides down to the slab's thickness
+let slab = null;
+function ensureSlab() {
+  const W = doc.w, Hh = doc.h, D = -doc.w * SLAB;
+  if (slab && slab.w === W && slab.h === Hh) return slab;
+  if (slab) { gl.deleteVertexArray(slab.vao); gl.deleteBuffer(slab.vb); }
+  const v = [];
+  const quad = (p, n, uv) => { for (const i of [0, 1, 2, 0, 2, 3]) v.push(...p[i], ...n, ...uv[i]); };
+  quad([[0, 0, 0], [W, 0, 0], [W, Hh, 0], [0, Hh, 0]], [0, 0, 1], [[0, 0], [1, 0], [1, 1], [0, 1]]);
+  quad([[0, 0, 0], [W, 0, 0], [W, 0, D], [0, 0, D]], [0, -1, 0], [[0, 0], [1, 0], [1, 0], [0, 0]]);
+  quad([[0, Hh, 0], [W, Hh, 0], [W, Hh, D], [0, Hh, D]], [0, 1, 0], [[0, 1], [1, 1], [1, 1], [0, 1]]);
+  quad([[0, 0, 0], [0, Hh, 0], [0, Hh, D], [0, 0, D]], [-1, 0, 0], [[0, 0], [0, 1], [0, 1], [0, 0]]);
+  quad([[W, 0, 0], [W, Hh, 0], [W, Hh, D], [W, 0, D]], [1, 0, 0], [[1, 0], [1, 1], [1, 1], [1, 0]]);
+  const vao = gl.createVertexArray(), vb = gl.createBuffer();
+  gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 32, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 24);
+  gl.bindVertexArray(null);
+  return slab = { w: W, h: Hh, vao, vb, n: v.length / 8 };
+}
+// multisampled colour + depth (the canvas itself has neither), resolved onto the canvas each frame
+let MS = null, stackT = null;
+function ensureMS(w, hgt) {
+  if (MS && MS.w === w && MS.h === hgt) return MS;
+  freeMS();
+  const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES));
+  const fb = gl.createFramebuffer(), c = gl.createRenderbuffer(), d = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, c); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, w, hgt);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, d); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, w, hgt);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, c);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, d);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return MS = { fb, c, d, w, h: hgt };
+}
+function freeMS() {
+  if (MS) { gl.deleteFramebuffer(MS.fb); gl.deleteRenderbuffer(MS.c); gl.deleteRenderbuffer(MS.d); MS = null; }
+  freeTarget(stackT); stackT = null;
+}
+// summed heights of the layers drawn so far, so each layer stands on the ones below. Needs a float field;
+// on 8-bit-only GPUs layers simply all start from the board.
+function stackTarget() {
+  if (FIELD.scale !== 1) return null;
+  if (!stackT || stackT.w !== T.w || stackT.h !== T.h) { freeTarget(stackT); stackT = makeTarget(T.w, T.h, FIELD); }
+  return stackT;
+}
+
+function render3D(out) {
+  const w = out ? out.w : canvas.width, hgt = out ? out.h : canvas.height;
+  const ms = ensureMS(w, hgt), cam = camera3D(w, hgt), g = ensureGrid(), stack = stackTarget();
+  if (stack) clearTarget(stack);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, ms.fb); gl.viewport(0, 0, w, hgt);
+  gl.colorMask(true, true, true, true); gl.depthMask(true);
+  gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.BLEND);
+  const key = cam.toObj(lightDir(120));
+  if (doc.bgImage || doc.bg !== 'none') {
+    ensureImgTex();
+    const s = ensureSlab(), u = PR.slab.u, c = doc.bg === 'none' ? [1, 1, 1] : hexRgb(doc.bg);
+    gl.useProgram(PR.slab.p);
+    gl.uniformMatrix4fv(u.uMVP, false, cam.mvp);
+    gl.uniform3f(u.uBg, c[0], c[1], c[2]); gl.uniform3f(u.uL, ...key);
+    gl.uniform1i(u.uImg, doc.bgImage ? 1 : 0); bindTex(0, imgTex); gl.uniform1i(u.uTex, 0);
+    gl.bindVertexArray(s.vao); gl.drawArrays(gl.TRIANGLES, 0, s.n);
+  }
+  let k = 0;
+  for (const L of doc.layers) {
+    if (!L.visible || !L.strokes.length) continue;
+    const tex = layerTarget(L).tex, u = PR.mesh.u, K = L.params.vol * ui.depth;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, ms.fb); gl.viewport(0, 0, w, hgt); gl.enable(gl.DEPTH_TEST);
+    gl.useProgram(PR.mesh.p);
+    const Ld = layerUniforms(u, L, tex, T.w, T.h);
+    gl.uniform3f(u.uL, ...cam.toObj(Ld));         // the light stays put while the drawing turns under it
+    gl.uniform3f(u.uCam, ...cam.eye);
+    gl.uniformMatrix4fv(u.uMVP, false, cam.mvp);
+    bindTex(1, stack ? stack.tex : null); gl.uniform1i(u.uStack, 1); gl.uniform1i(u.uHasStack, stack ? 1 : 0);
+    gl.uniform1f(u.uDepth, ui.depth); gl.uniform1f(u.uLift, .6 + .3 * ++k);   // soft edges stay above what's under them
+    gl.bindVertexArray(g.vao);
+    // depth from the solid part only, then colour over it: soft edges blend without punching holes
+    gl.uniform1i(u.uPass, 0); gl.colorMask(false, false, false, false);
+    gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0);
+    gl.uniform1i(u.uPass, 1); gl.colorMask(true, true, true, true); gl.depthMask(false);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0);
+    gl.disable(gl.BLEND); gl.depthMask(true);
+    if (stack) {
+      gl.disable(gl.DEPTH_TEST);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+      fullscreen(PR.hgt, stack, uh => { hUniforms(uh, L, tex); gl.uniform1f(uh.uK, K); gl.uniform1f(uh.uEnc, 0); });
+      gl.disable(gl.BLEND);
+    }
+  }
+  gl.disable(gl.DEPTH_TEST);
+  gl.bindVertexArray(null);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, ms.fb);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, out ? out.fb : null);
+  gl.blitFramebuffer(0, 0, w, hgt, 0, 0, w, hgt, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// glides (enter, leave, reset, zoom steps) and the drift after a flick; true while something still moves
+const pose = () => Object.fromEntries(POSE_KEYS.map(k => [k, three[k]]));
+function animate3D(to, done, dur = 850) {
+  three.anim = { t0: performance.now(), dur, from: pose(), to: { ...pose(), ...to }, done };
+  three.vrx = three.vry = 0;
+  request();
+}
+function step3D(now) {
+  const dt = Math.min(64, now - (three.t || now)); three.t = now;
+  let moving = false;
+  const a = three.anim;
+  if (a) {
+    const t = clamp((now - a.t0) / a.dur, 0, 1), e = t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    for (const k of POSE_KEYS) three[k] = lerp(a.from[k], a.to[k], e);
+    if (t >= 1) { three.anim = null; if (a.done) a.done(); } else moving = true;
+  } else if (three.vrx || three.vry) {
+    three.rx = clamp(three.rx + three.vrx * dt, -TILT, TILT); three.ry = clamp(three.ry + three.vry * dt, -TILT, TILT);
+    const f = Math.exp(-dt / 260); three.vrx *= f; three.vry *= f;
+    if (Math.hypot(three.vrx, three.vry) < 2e-5) three.vrx = three.vry = 0; else moving = true;
+  }
+  if (three.on) zq('pct').textContent = Math.round(pctOf(three.zoom)) + '%';
+  return moving;
+}
+function size3D() {
+  const vw = innerWidth, vh = innerHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const k = Math.min(dpr, Math.sqrt((isTouchUI ? 4.5e6 : 6e6) / (vw * vh)));
+  canvas.width = Math.round(vw * k); canvas.height = Math.round(vh * k);
+  request();
+}
+function enter3D() {
+  if (three.on) return;
+  Object.assign(three, { on: true, leaving: false, rx: 0, ry: 0, zoom: view.z, panX: view.x, panY: view.y, vrx: 0, vry: 0 });
+  board.classList.add('three'); board.classList.remove('nocursor', 'grab'); ring.classList.remove('on');
+  zq('fit').setAttribute('aria-pressed', 'false');
+  size3D();
+  animate3D(POSE);
+}
+function exit3D() {
+  if (!three.on || three.leaving) return;
+  three.leaving = true;
+  orbit.ptrs.clear();
+  animate3D({ rx: 0, ry: 0, zoom: view.z, panX: view.x, panY: view.y }, () => {
+    three.on = three.leaving = false;
+    board.classList.remove('three', 'grabbing');
+    freeMS();
+    canvas.width = T.w; canvas.height = T.h;
+    fit(); request();
+  }, 650);
+}
+const zoom3D = f => { three.anim = null; three.zoom = clamp(three.zoom * f, .25, 8); request(); };
+
+// turning: drag rotates, two fingers pinch and move, Space / right / middle drag moves
+const orbit = { ptrs: new Map(), pan: false };
+function orbitStart() {
+  const ps = [...orbit.ptrs.values()];
+  Object.assign(orbit, { n: ps.length, c0: centroid(ps), d0: spread(ps), z0: three.zoom, px0: three.panX, py0: three.panY,
+    rx0: three.rx, ry0: three.ry, lt: performance.now(), lrx: three.rx, lry: three.ry, vrx: 0, vry: 0 });
+}
+function orbitDown(e) {
+  e.preventDefault();
+  if (three.leaving) return;
+  if (stage.setPointerCapture) try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  orbit.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  orbit.pan = e.pointerType === 'mouse' && e.button !== 0 || spaceDown;
+  three.anim = null; three.vrx = three.vry = 0;
+  orbitStart();
+  board.classList.add('grabbing');
+}
+function orbitMove(e) {
+  const p = orbit.ptrs.get(e.pointerId);
+  if (!p) return;
+  p.x = e.clientX; p.y = e.clientY;
+  const ps = [...orbit.ptrs.values()], c = centroid(ps);
+  if (ps.length !== orbit.n) { orbitStart(); return; }
+  const dx = c[0] - orbit.c0[0], dy = c[1] - orbit.c0[1];
+  if (ps.length >= 2) {
+    three.zoom = clamp(orbit.z0 * spread(ps) / Math.max(orbit.d0, 1), .25, 8);
+    three.panX = orbit.px0 + dx; three.panY = orbit.py0 + dy;
+  } else if (orbit.pan) {
+    three.panX = orbit.px0 + dx; three.panY = orbit.py0 + dy;
+  } else {
+    three.ry = clamp(orbit.ry0 + dx * .006, -TILT, TILT); three.rx = clamp(orbit.rx0 + dy * .006, -TILT, TILT);
+    const now = e.timeStamp, dt = now - orbit.lt;
+    if (dt > 0) {
+      orbit.vrx = lerp(orbit.vrx, (three.rx - orbit.lrx) / dt, .6); orbit.vry = lerp(orbit.vry, (three.ry - orbit.lry) / dt, .6);
+      orbit.lt = now; orbit.lrx = three.rx; orbit.lry = three.ry;
+    }
+  }
+  request();
+}
+function orbitUp(e) {
+  if (!orbit.ptrs.delete(e.pointerId)) return;
+  if (orbit.ptrs.size) { orbitStart(); return; }
+  board.classList.remove('grabbing');
+  // a flick keeps turning and settles; a drag that stopped before letting go stays put
+  if (orbit.n === 1 && !orbit.pan && e.timeStamp - orbit.lt < 70) {
+    const v = Math.hypot(orbit.vrx, orbit.vry), k = v > .003 ? .003 / v : 1;   // a hard flick drifts, never spins
+    three.vrx = orbit.vrx * k; three.vry = orbit.vry * k; three.t = performance.now(); request();
   }
 }
 
@@ -1291,11 +1640,12 @@ function frame() {
   for (const id of dirty) { const L = layerById(id); if (L) rebuild(L); }
   dirty.clear();
   if (drawing) renderLive(drawing.L, drawing.st);
-  compositeScreen();
+  const moving = three.on && step3D(t0);       // may finish leaving 3D, so check again before drawing
+  if (three.on) render3D(); else compositeScreen();
   needsDraw = false;
   lastMs = lastMs ? lerp(lastMs, performance.now() - t0, .2) : performance.now() - t0;
   updateStat();
-  if (drawing) raf = requestAnimationFrame(frame);
+  if (drawing || moving) raf = requestAnimationFrame(frame);
 }
 const statEl = $('#stat');
 function updateStat() {
@@ -1322,6 +1672,7 @@ function fit() {
   cssW = Math.round(doc.w * k); cssH = Math.round(doc.h * k);
   board.style.width = cssW + 'px'; board.style.height = cssH + 'px';
   applyView(); scheduleRes();
+  if (three.on) size3D();
 }
 function clampView() {
   if (view.z <= 1) { view.x = 0; view.y = 0; return; }
@@ -1331,8 +1682,8 @@ function clampView() {
 function applyView() {
   clampView();
   board.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
-  zq('pct').textContent = Math.round(pctOf(view.z)) + '%';
-  zq('fit').setAttribute('aria-pressed', String(atFit()));
+  zq('pct').textContent = Math.round(pctOf(three.on ? three.zoom : view.z)) + '%';
+  zq('fit').setAttribute('aria-pressed', String(!three.on && atFit()));
   if (T.w) scheduleRes();
   updateGlass();
 }
@@ -1347,9 +1698,10 @@ function zoomAt(px, py, factor) {
 let easeT;
 function eased(fn) { board.classList.add('easing'); fn(); clearTimeout(easeT); easeT = setTimeout(() => board.classList.remove('easing'), 460); }
 const stageCentre = () => { const r = stage.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
-const zoomToPct = p => eased(() => { const [x, y] = stageCentre(); zoomAt(x, y, zOfPct(p) / view.z); });
-const zoomStep = d => eased(() => { const [x, y] = stageCentre(); zoomAt(x, y, d > 0 ? 1.5 : 1 / 1.5); });
-const fitView = () => eased(() => { view.z = 1; view.x = 0; view.y = 0; applyView(); });
+// in 3D the same controls glide the camera instead; Fit returns to the starting angle
+const zoomToPct = p => three.on ? animate3D({ zoom: clamp(zOfPct(p), .25, 8) }, null, 500) : eased(() => { const [x, y] = stageCentre(); zoomAt(x, y, zOfPct(p) / view.z); });
+const zoomStep = d => three.on ? animate3D({ zoom: clamp(three.zoom * (d > 0 ? 1.5 : 1 / 1.5), .25, 8) }, null, 500) : eased(() => { const [x, y] = stageCentre(); zoomAt(x, y, d > 0 ? 1.5 : 1 / 1.5); });
+const fitView = () => three.on ? animate3D(POSE) : eased(() => { view.z = 1; view.x = 0; view.y = 0; applyView(); });
 let resT = 0;
 function scheduleRes() { clearTimeout(resT); resT = setTimeout(updateResolution, T.w ? 140 : 0); }
 function updateResolution() {
@@ -1362,7 +1714,7 @@ function updateResolution() {
   if (tw === T.w && th === T.h) return;
   if (T.w && Math.abs(tw / T.w - 1) < .12 && tw < T.w) return;          // small zoom-outs keep the sharper field
   T.S = tw / doc.w;
-  canvas.width = tw; canvas.height = th;
+  if (!three.on) { canvas.width = tw; canvas.height = th; }     // in 3D the canvas follows the window instead
   resizeTargets(tw, th);
   request();
 }
@@ -1370,6 +1722,17 @@ new ResizeObserver(fit).observe(stage);
 addEventListener('wheel', e => {
   if (!stage.contains(e.target)) return;
   const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+  if (three.on) {                                   // scroll turns the drawing, pinch / ⌘-scroll zooms
+    e.preventDefault();
+    if (three.leaving) return;
+    if (e.metaKey || e.ctrlKey) zoom3D(Math.exp(-e.deltaY * unit * (e.ctrlKey && !e.metaKey ? .01 : .0025)));
+    else {
+      three.anim = null; three.vrx = three.vry = 0;
+      three.ry = clamp(three.ry - e.deltaX * unit * .004, -TILT, TILT); three.rx = clamp(three.rx - e.deltaY * unit * .004, -TILT, TILT);
+      request();
+    }
+    return;
+  }
   if (e.metaKey || e.ctrlKey) {
     e.preventDefault();
     const pinch = e.ctrlKey && !e.metaKey;
@@ -1384,7 +1747,7 @@ addEventListener('wheel', e => {
   zq('pct').onclick = e => {
     e.stopPropagation();
     menu.replaceChildren();
-    const cur = Math.round(pctOf(view.z));
+    const cur = Math.round(pctOf(three.on ? three.zoom : view.z));
     for (const [label, p] of [['Fit', null], ...[25, 50, 100, 200, 400].map(p => [p + '%', p])]) {
       menu.append(h('button', { type: 'button', 'aria-current': String(p === null ? atFit() : cur === p),
         onclick: () => { menu.classList.remove('on'); p === null ? fitView() : zoomToPct(p); } }, label));
@@ -1411,6 +1774,7 @@ function mutate(fn) { const s = snapshot(); fn(); commit(s); }
 let editSnap = null;
 const beginEdit = () => { if (!editSnap) editSnap = snapshot(); };
 const endEdit = () => { if (editSnap) { commit(editSnap); editSnap = null; } };
+const beginEditDoc = beginEdit, endEditDoc = endEdit;
 function restore(s) {
   const sized = s.w !== doc.w || s.h !== doc.h;
   doc = { w: s.w, h: s.h, bg: s.bg, bgImage: s.bgImage, active: s.active, layers: cloneLayers(s.layers) };
@@ -1418,7 +1782,7 @@ function restore(s) {
   for (const L of doc.layers) dirty.add(L.id);
   if (sized) { view.z = 1; fit(); updateResolution(); }
   const L = activeLayer();
-  if (L) { ui.brush = L.brush; if (ui.tool !== 'erase') ui.tool = L.brush; }
+  if (L) { ui.brush = L.brush; if (brushTool()) ui.tool = L.brush; }
   afterChange();
 }
 function undo() { if (drawing) return; const s = hist.undo.pop(); if (!s) return; hist.redo.push(snapshot()); restore(s); updUndo(); docDirty = true; save(); }
@@ -1502,7 +1866,7 @@ function savePrefs() {
   if (isLab || !prefsReady) return;
   try {
     localStorage.setItem(KEY, JSON.stringify({ v: 2, cur: session ? session.id : null, last: lastParams,
-      ui: { tool: ui.tool, brush: ui.brush, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
+      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
   } catch (e) {}
 }
 function save() {
@@ -1550,7 +1914,7 @@ function setDocument(d) {
   for (const L of doc.layers) dirty.add(L.id);
   view.z = 1; fit(); updateResolution();
   const L = activeLayer();
-  if (L) { ui.brush = L.brush; if (ui.tool !== 'erase') ui.tool = L.brush; }
+  if (L) { ui.brush = L.brush; if (brushTool()) ui.tool = L.brush; }
   afterChange();
 }
 let switching = false;
@@ -1729,6 +2093,7 @@ function updateGesture() {
 }
 
 stage.addEventListener('pointerdown', e => {
+  if (three.on) { orbitDown(e); return; }
   if (stage.setPointerCapture) try { stage.setPointerCapture(e.pointerId); } catch (_) {}
   ring.classList.remove('on');
   if (e.pointerType === 'touch') {
@@ -1759,6 +2124,7 @@ stage.addEventListener('pointerdown', e => {
   startStroke(e);
 });
 stage.addEventListener('pointermove', e => {
+  if (three.on) { orbitMove(e); return; }
   if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
     const t = touches.get(e.pointerId);
     t.x = e.clientX; t.y = e.clientY;
@@ -1772,6 +2138,7 @@ stage.addEventListener('pointermove', e => {
   if (e.pointerType !== 'touch') moveRing(e);
 });
 function pointerEnd(e) {
+  if (orbit.ptrs.has(e.pointerId)) { orbitUp(e); return; }
   if (e.pointerType === 'touch') {
     touches.delete(e.pointerId);
     if (touches.size === 0) {
@@ -1814,8 +2181,9 @@ addEventListener('keydown', e => {
     else { const L = activeLayer(); if (L) setParam(L, 'size', clamp(Math.round(L.params.size * f), 2, 140)); }
     refreshControls(); return;
   }
-  if (k === 'b') setTool(ui.tool === 'erase' ? ui.brush : TOOLS[(TOOLS.indexOf(ui.tool) + 1) % TOOLS.length]);
+  if (k === 'b') setTool(!brushTool() ? ui.brush : TOOLS[(TOOLS.indexOf(ui.tool) + 1) % TOOLS.length]);
   else if (k === 'e') setTool(ui.tool === 'erase' ? ui.brush : 'erase');
+  else if (k === '3') setTool(ui.tool === 'view' ? ui.brush : 'view');
   else if (k === 's') togglePanel();
   else if (k === 'escape') togglePanel(false);
   else if (k === '0') fitView();
@@ -1897,6 +2265,8 @@ $('#undo').onclick = undo;
 $('#redo').onclick = redo;
 
 function setTool(t) {
+  if (t === 'view') { ui.tool = 'view'; enter3D(); afterChange(); return; }
+  exit3D();
   if (t === 'erase') { ui.tool = 'erase'; }
   else {
     ui.tool = t; ui.brush = t;
@@ -1930,6 +2300,7 @@ const hint = html => h('div', { class: 'hint', html });
 const fmtNum = (v, step, suf = '') => (step >= 1 ? Math.round(v) : v.toFixed(2)) + suf;
 
 function slider(o) {
+  const beginEdit = o.hist === false ? () => {} : beginEditDoc, endEdit = o.hist === false ? () => {} : endEditDoc;   // view settings aren't undo steps
   const inp = h('input', { type: 'range', min: o.min, max: o.max, step: o.step, 'aria-label': o.label });
   const b = h('b');
   const row = h('div', { class: 'ctrl' }, h('span', null, o.label), b, inp);
@@ -2029,26 +2400,30 @@ function renderPanel() {
 
   // Brush
   const bp = pane('brush'); bp.replaceChildren();
-  if (ui.tool === 'erase') {
-    bp.append(sec('Eraser'),
-      slider({ label: 'Size', min: 4, max: 240, step: 1, get: () => ui.eraser, set: v => { ui.eraser = v; save(); } }),
-      hint(`Cuts ${L ? L.name : 'the active layer'}. The cut edge stays rounded.`));
-  }
-  bp.append(sec(`${NAMES[brush]} stroke`),
-    ...[['size', 'Size', 2, 140, 1], ['pressure', 'Pressure', 0, 1, .01], ['speed', 'Speed', 0, 1, .01], ['tilt', 'Tilt', 0, 1, .01]].map(ps),
-    sec('Flow'),
-    ...[['merge', 'Merge', 0, 1, .01], ['pool', 'Pooling', 0, 2, .01], ['vary', 'Wobble', 0, 1, .01], ['smooth', 'Smoothing', 0, 1, .01]].map(ps),
-  );
-  const taper = ps(['taper', 'Taper', .2, 3, .01]);
-  taper.hidden = P.end !== 'wedge';
-  bp.append(sec('Ends'),
-    seg([['drop', 'Drop'], ['wedge', 'Wedge']], () => (L ? L.params : lastParams[brush]).end, v => { beginEdit(); set('end')(v); endEdit(); taper.hidden = v !== 'wedge'; }),
-    taper);
-  bp.append(sec('Mirror'),
-    seg(Object.keys(SYM_ICONS).map(k => [k, SYM_ICONS[k], { off: 'No mirror', x: 'Left / right', y: 'Top / bottom', xy: 'Four quarters', r6: 'Six-way radial' }[k]]),
-      () => ui.sym, v => { ui.sym = v; updateGuides(); save(); }),
-    hint('Pressure comes from Apple Pencil and drawing tablets, and from a Force Touch trackpad in Safari. A mouse has no pressure sensor, so speed and pauses do the work: slow down to swell, hold still to pool.'));
+  $('.tab[data-tab="brush"]').textContent = ui.tool === 'view' ? 'View' : 'Brush';
+  if (ui.tool === 'view') bp.append(...viewControls());
+  else {
+    if (ui.tool === 'erase') {
+      bp.append(sec('Eraser'),
+        slider({ label: 'Size', min: 4, max: 240, step: 1, get: () => ui.eraser, set: v => { ui.eraser = v; save(); } }),
+        hint(`Cuts ${L ? L.name : 'the active layer'}. The cut edge stays rounded.`));
+    }
+    bp.append(sec(`${NAMES[brush]} stroke`),
+      ...[['size', 'Size', 2, 140, 1], ['pressure', 'Pressure', 0, 1, .01], ['speed', 'Speed', 0, 1, .01], ['tilt', 'Tilt', 0, 1, .01]].map(ps),
+      sec('Flow'),
+      ...[['merge', 'Merge', 0, 1, .01], ['pool', 'Pooling', 0, 2, .01], ['vary', 'Wobble', 0, 1, .01], ['smooth', 'Smoothing', 0, 1, .01]].map(ps),
+    );
+    const taper = ps(['taper', 'Taper', .2, 3, .01]);
+    taper.hidden = P.end !== 'wedge';
+    bp.append(sec('Ends'),
+      seg([['drop', 'Drop'], ['wedge', 'Wedge']], () => (L ? L.params : lastParams[brush]).end, v => { beginEdit(); set('end')(v); endEdit(); taper.hidden = v !== 'wedge'; }),
+      taper);
+    bp.append(sec('Mirror'),
+      seg(Object.keys(SYM_ICONS).map(k => [k, SYM_ICONS[k], { off: 'No mirror', x: 'Left / right', y: 'Top / bottom', xy: 'Four quarters', r6: 'Six-way radial' }[k]]),
+        () => ui.sym, v => { ui.sym = v; updateGuides(); save(); }),
+      hint('Pressure comes from Apple Pencil and drawing tablets, and from a Force Touch trackpad in Safari. A mouse has no pressure sensor, so speed and pauses do the work: slow down to swell, hold still to pool.'));
 
+  }
   // Surface
   const sp = pane('surface'); sp.replaceChildren();
   const presets = PRESETS[brush];
@@ -2235,7 +2610,7 @@ function selectLayer(id) {
   doc.active = id;
   const L = activeLayer();
   ui.brush = L.brush;
-  if (ui.tool !== 'erase') ui.tool = L.brush;
+  if (brushTool()) ui.tool = L.brush;
   afterChange();
 }
 function moveLayer(i, d) {
@@ -2351,6 +2726,11 @@ function renderCanvas(S, transparent, crop) {
   gl.readPixels(x0, hgt - y1, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, px);
   [ctx.field, ctx.scratch, ctx.erase, out].forEach(freeTarget);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.disable(gl.BLEND);
+  return { cv: pixelCanvas(px, cw, ch), cw, ch };
+}
+// premultiplied, bottom-up GL pixels → a straight-alpha 2D canvas
+function pixelCanvas(px, cw, ch) {
   const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
   const c2 = cv.getContext('2d');
   const id = c2.createImageData(cw, ch), d = id.data;
@@ -2364,8 +2744,7 @@ function renderCanvas(S, transparent, crop) {
     }
   }
   c2.putImageData(id, 0, 0);
-  gl.disable(gl.BLEND);
-  return { cv, cw, ch };
+  return cv;
 }
 // hand a file to the user: the share sheet on touch (Save to Files / Photos), a download elsewhere
 async function deliverFile(blob, name, type, done) {
@@ -2414,7 +2793,190 @@ async function exportPNG() {
     request();
   }
 }
-$('#btnExport').onclick = exportPNG;
+$('#btnExport').onclick = () => three.on ? export3DPNG() : exportPNG();
+const stamp = () => { const n = new Date(), p = v => String(v).padStart(2, '0'); return `${n.getFullYear()}${p(n.getMonth() + 1)}${p(n.getDate())}-${p(n.getHours())}${p(n.getMinutes())}${p(n.getSeconds())}`; };
+const hasInk = () => doc.layers.some(L => L.visible && L.strokes.length);
+
+// the 3D view as it stands, at screen resolution, with a transparent surround
+async function export3DPNG() {
+  if (exporting) return;
+  exporting = true;
+  try {
+    const out = makeTarget(canvas.width, canvas.height, FMT8), px = new Uint8Array(out.w * out.h * 4);
+    render3D(out);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
+    gl.readPixels(0, 0, out.w, out.h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    freeTarget(out);
+    const blob = await new Promise(r => pixelCanvas(px, out.w, out.h).toBlob(r, 'image/png'));
+    await deliverFile(blob, `slip-metal-3d-${stamp()}.png`, 'image/png', `Saved PNG · ${out.w}×${out.h}`);
+  } catch (err) { console.error(err); toast('Export failed: ' + (err.message || err)); }
+  finally { exporting = false; request(); }
+}
+
+/* Models. The visible layers' heights are read back on a grid (each layer packed into 16 bits of RGBA8,
+   then summed, so they stack exactly as in the 3D view, Depth included) and turned into a mesh. */
+function heightGrid(cells) {
+  const cell = Math.max(doc.w, doc.h) / cells, nx = Math.ceil(doc.w / cell), ny = Math.ceil(doc.h / cell);
+  const S = clamp(2 * nx / doc.w, .35, 2), fw = Math.round(doc.w * S), fh = Math.round(doc.h * S);
+  const ctx = { field: makeTarget(fw, fh, FIELD), scratch: makeTarget(fw, fh, FIELD), erase: makeTarget(fw, fh, FIELD), minSig: .7 * doc.w / fw };
+  const out = makeTarget(nx + 1, ny + 1, FMT8), px = new Uint8Array((nx + 1) * (ny + 1) * 4);
+  const hgt = new Float32Array((nx + 1) * (ny + 1));
+  for (const L of doc.layers) {
+    if (!L.visible || !L.strokes.length) continue;
+    buildLayer(L, ctx);
+    const P = L.params, K = P.vol * ui.depth, enc = (P.edge + P.size * 2) * K + 1;
+    gl.disable(gl.BLEND);
+    fullscreen(PR.hgt, out, u => { hUniforms(u, L, ctx.field.tex); gl.uniform1f(u.uK, K); gl.uniform1f(u.uEnc, enc); });
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
+    gl.readPixels(0, 0, nx + 1, ny + 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+      const q = ((ny - j) * (nx + 1) + i) * 4;
+      hgt[j * (nx + 1) + i] += (px[q] * 256 + px[q + 1]) / 65535 * enc;
+    }
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  [ctx.field, ctx.scratch, ctx.erase, out].forEach(freeTarget);
+  return { nx, ny, hgt };
+}
+/* A mesh in any frame: map() places a doc point (x, y down, z up, in doc px) and dir() turns an outward
+   direction the same way, so each face is wound outward whatever the format's axes. solid adds the
+   slab's walls and a floor, making a closed tile; shade goes to vertex colour (top 1, walls, floor darker). */
+function buildModel({ nx, ny, hgt }, map, dir, solid, base) {
+  const pos = [], uv = [], shade = [], idx = [];
+  const vert = (x, y, z, s) => { pos.push(...map(x, y, z)); uv.push(x / doc.w, y / doc.h); shade.push(s); return pos.length / 3 - 1; };
+  const tri = (a, b, c, out) => {
+    const o = dir(...out), P = i => [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]];
+    const A = P(a), B = P(b), C = P(c), u = B.map((v, i) => v - A[i]), v = C.map((w, i) => w - A[i]);
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    if (n[0] * o[0] + n[1] * o[1] + n[2] * o[2] < 0) idx.push(a, c, b); else idx.push(a, b, c);
+  };
+  const X = i => i / nx * doc.w, Y = j => j / ny * doc.h, Z = (i, j) => base + hgt[j * (nx + 1) + i];
+  const top = [];
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) top.push(vert(X(i), Y(j), Z(i, j), 1));
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const a = top[j * (nx + 1) + i], b = a + 1, c = a + nx + 1, d = c + 1;
+    tri(a, c, b, [0, 0, 1]); tri(b, c, d, [0, 0, 1]);
+  }
+  if (solid) {
+    // perimeter clockwise from the top-left corner, as [i, j] grid points
+    const ring = [];
+    for (let i = 0; i < nx; i++) ring.push([i, 0]);
+    for (let j = 0; j < ny; j++) ring.push([nx, j]);
+    for (let i = nx; i > 0; i--) ring.push([i, ny]);
+    for (let j = ny; j > 0; j--) ring.push([0, j]);
+    const outOf = ([i, j], [i2, j2]) => j === 0 && j2 === 0 ? [0, -1, 0] : i === nx && i2 === nx ? [1, 0, 0] : j === ny && j2 === ny ? [0, 1, 0] : [-1, 0, 0];
+    for (let k = 0; k < ring.length; k++) {
+      const p = ring[k], q = ring[(k + 1) % ring.length], o = outOf(p, q);
+      const a = vert(X(p[0]), Y(p[1]), Z(p[0], p[1]), .78), b = vert(X(q[0]), Y(q[1]), Z(q[0], q[1]), .78);
+      const c = vert(X(p[0]), Y(p[1]), 0, .78), d = vert(X(q[0]), Y(q[1]), 0, .78);
+      tri(a, c, b, o); tri(b, c, d, o);
+    }
+    const mid = vert(doc.w / 2, doc.h / 2, 0, .6), floor = ring.map(([i, j]) => vert(X(i), Y(j), 0, .6));
+    for (let k = 0; k < floor.length; k++) tri(mid, floor[k], floor[(k + 1) % floor.length], [0, 0, -1]);
+  }
+  return { pos: new Float32Array(pos), uv: new Float32Array(uv), shade, idx: new Uint32Array(idx) };
+}
+function triNormal(p, a, b, c) {
+  const u = [p[b * 3] - p[a * 3], p[b * 3 + 1] - p[a * 3 + 1], p[b * 3 + 2] - p[a * 3 + 2]];
+  const v = [p[c * 3] - p[a * 3], p[c * 3 + 1] - p[a * 3 + 1], p[c * 3 + 2] - p[a * 3 + 2]];
+  return [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+}
+function stlBlob(m) {
+  const nt = m.idx.length / 3, dv = new DataView(new ArrayBuffer(84 + nt * 50));
+  const head = 'Slip & Metal relief';
+  for (let i = 0; i < head.length; i++) dv.setUint8(i, head.charCodeAt(i));
+  dv.setUint32(80, nt, true);
+  for (let t = 0, o = 84; t < nt; t++, o += 50) {
+    const a = m.idx[t * 3], b = m.idx[t * 3 + 1], c = m.idx[t * 3 + 2], n = triNormal(m.pos, a, b, c), l = Math.hypot(...n) || 1;
+    for (let k = 0; k < 3; k++) dv.setFloat32(o + k * 4, n[k] / l, true);
+    [a, b, c].forEach((v, r) => { for (let k = 0; k < 3; k++) dv.setFloat32(o + 12 + r * 12 + k * 4, m.pos[v * 3 + k], true); });
+    dv.setUint16(o + 48, 0, true);
+  }
+  return new Blob([dv.buffer], { type: 'model/stl' });
+}
+// glTF binary: one mesh, the 2D render as an unlit texture (it already carries the material's light)
+async function glbBlob(m, png, clear) {
+  const nv = m.pos.length / 3, nrm = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
+  for (let t = 0; t < m.idx.length; t += 3) {
+    const n = triNormal(m.pos, m.idx[t], m.idx[t + 1], m.idx[t + 2]);
+    for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) nrm[m.idx[t + r] * 3 + k] += n[k];
+  }
+  for (let v = 0; v < nv; v++) {
+    const l = Math.hypot(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]) || 1;
+    for (let k = 0; k < 3; k++) { nrm[v * 3 + k] /= l; col[v * 3 + k] = m.shade[v]; }
+  }
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let v = 0; v < nv; v++) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], m.pos[v * 3 + k]); hi[k] = Math.max(hi[k], m.pos[v * 3 + k]); }
+  const img = new Uint8Array(await png.arrayBuffer());
+  const parts = [m.pos, nrm, m.uv, col, m.idx, img], views = [];
+  let len = 0;
+  for (const p of parts) { views.push({ buffer: 0, byteOffset: len, byteLength: p.byteLength }); len += Math.ceil(p.byteLength / 4) * 4; }
+  views.forEach((v, i) => { if (i < 4) v.target = 34962; else if (i === 4) v.target = 34963; });
+  const json = {
+    asset: { version: '2.0', generator: 'Slip & Metal' },
+    extensionsUsed: ['KHR_materials_unlit'],
+    scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0, name: session ? session.name : 'Relief' }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1, TEXCOORD_0: 2, COLOR_0: 3 }, indices: 4, material: 0 }] }],
+    materials: [{ name: 'Drawing', doubleSided: clear, alphaMode: clear ? 'MASK' : 'OPAQUE', ...(clear ? { alphaCutoff: .5 } : {}),
+      pbrMetallicRoughness: { baseColorTexture: { index: 0 }, metallicFactor: 0, roughnessFactor: 1 }, extensions: { KHR_materials_unlit: {} } }],
+    textures: [{ source: 0, sampler: 0 }], samplers: [{ magFilter: 9729, minFilter: 9729, wrapS: 33071, wrapT: 33071 }],
+    images: [{ bufferView: 5, mimeType: 'image/png' }],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: nv, type: 'VEC3', min: lo, max: hi },
+      { bufferView: 1, componentType: 5126, count: nv, type: 'VEC3' },
+      { bufferView: 2, componentType: 5126, count: nv, type: 'VEC2' },
+      { bufferView: 3, componentType: 5126, count: nv, type: 'VEC3' },
+      { bufferView: 4, componentType: 5125, count: m.idx.length, type: 'SCALAR' },
+    ],
+    bufferViews: views, buffers: [{ byteLength: len }],
+  };
+  let js = new TextEncoder().encode(JSON.stringify(json));
+  const jl = Math.ceil(js.length / 4) * 4, jp = new Uint8Array(jl).fill(0x20); jp.set(js);
+  const bin = new Uint8Array(len);
+  parts.forEach((p, i) => bin.set(new Uint8Array(p.buffer, p.byteOffset, p.byteLength), views[i].byteOffset));
+  const head = new DataView(new ArrayBuffer(20));
+  head.setUint32(0, 0x46546C67, true); head.setUint32(4, 2, true); head.setUint32(8, 12 + 8 + jl + 8 + len, true);
+  head.setUint32(12, jl, true); head.setUint32(16, 0x4E4F534A, true);
+  const bh = new DataView(new ArrayBuffer(8)); bh.setUint32(0, len, true); bh.setUint32(4, 0x004E4942, true);
+  return new Blob([head.buffer, jp, bh.buffer, bin], { type: 'model/gltf-binary' });
+}
+async function exportModel(kind) {
+  if (exporting) return;
+  if (!hasInk()) { toast('Nothing to export yet'); return; }
+  exporting = true;
+  toast('Building model…');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const g = heightGrid(kind === 'stl' ? 480 : 512), base = doc.w * SLAB;
+    const clear = doc.bg === 'none' && !doc.bgImage;
+    let blob;
+    if (kind === 'stl') {
+      const s = 120 / doc.w;                        // a 120 mm tile, z up, ready for a slicer
+      blob = stlBlob(buildModel(g, (x, y, z) => [x * s, (doc.h - y) * s, z * s], (x, y, z) => [x, -y, z], true, base));
+    } else {
+      const s = .32 / Math.max(doc.w, doc.h);       // metres, y up, centred: 32 cm on the long side
+      const m = buildModel(g, (x, y, z) => [(x - doc.w / 2) * s, z * s, (y - doc.h / 2) * s], (x, y, z) => [x, z, y], !clear, clear ? 0 : base);
+      const { cv } = renderCanvas(Math.min(2, 4096 / Math.max(doc.w, doc.h)), false, false);
+      blob = await glbBlob(m, await new Promise(r => cv.toBlob(r, 'image/png')), clear);
+    }
+    const mb = (blob.size / 1048576).toFixed(1);
+    await deliverFile(blob, `slip-metal-${stamp()}.${kind}`, blob.type, `Saved ${kind.toUpperCase()} · ${mb} MB`);
+  } catch (err) { console.error(err); toast('Export failed: ' + (err.message || err)); }
+  finally { exporting = false; request(); }
+}
+function viewControls() {
+  return [sec('3D view'),
+    slider({ label: 'Depth', min: 1, max: 12, step: .1, suf: '×', hist: false, get: () => ui.depth, set: v => { ui.depth = v; request(); save(); } }),
+    hint(isTouchUI
+      ? 'Drag to turn the drawing. Pinch to zoom, two fingers to move it. Fit returns to the starting angle.'
+      : 'Drag or scroll to turn · right-drag or <kbd>Space</kbd>-drag to move · pinch or <kbd>⌘</kbd>+scroll to zoom · <kbd>0</kbd> starting angle · <kbd>3</kbd> back to drawing'),
+    sec('Model'),
+    h('div', { class: 'btnrow' },
+      h('button', { type: 'button', class: 'btn', onclick: () => exportModel('stl') }, 'Export STL'),
+      h('button', { type: 'button', class: 'btn', onclick: () => exportModel('glb') }, 'Export GLB')),
+    hint('STL is a closed 120 mm tile for 3D printing. GLB keeps the colours, for Blender or any 3D viewer. Both use this Depth.')];
+}
 
 /* ════════════════════════════════════════════════════════════════════
    first-run sample: a few synthetic gestures so the tool opens showing what it does
@@ -2488,7 +3050,7 @@ async function boot() {
   }
   for (const L of doc.layers) dirty.add(L.id);
   const L0 = activeLayer();
-  if (L0) { ui.brush = L0.brush; if (ui.tool !== 'erase') ui.tool = L0.brush; }
+  if (L0) { ui.brush = L0.brush; if (brushTool()) ui.tool = L0.brush; }
   updUndo();
   fit();
   updateResolution();
@@ -2500,7 +3062,7 @@ boot();
 // leaving the app (home button, app switcher): write now rather than after the debounce
 addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
 addEventListener('pagehide', () => saveNow());
-window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, T, view, applyView, zoomToPct, dirty, renderPanel,
+window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, T, view, applyView, zoomToPct, dirty, renderPanel, three, animate3D, heightGrid,
   stamps(st, P) { const b = new FBuf(); strokeStamps(st, P, b, doc.w, doc.h, .5); return Array.from(b.a.subarray(0, b.n)); },
   setDoc(d) { doc = d; gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); } };
 if (/[?&]lab=/.test(location.search)) document.body.append(h('script', { src: 'dev/lab.js' }));   // local A/B against reference images (dev only)
