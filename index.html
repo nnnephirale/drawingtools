@@ -585,7 +585,7 @@ const ERASE_A = 2.2;
    state
    ════════════════════════════════════════════════════════════════════ */
 let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
-const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 3, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
+const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 3, canvas3d: true, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
 const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal }, stone: { ...DEF.stone } };
 const activeLayer = () => doc.layers.find(L => L.id === doc.active) || null;
 const layerById = id => doc.layers.find(L => L.id === id);
@@ -661,6 +661,7 @@ const GL_H = `
 precision highp sampler2D;
 uniform sampler2D uField;
 uniform float uInv, uA, uBevel, uBulge;
+uniform vec2 uDoc;
 vec2 F(vec2 uv){ return texture(uField, uv).rg * uInv; }
 float lnA;
 // 0 at the silhouette, 1 on the ridge of a lone line (exact for a straight gaussian ridge)
@@ -675,6 +676,8 @@ float H(vec2 uv){
   float t = min(d / B, 1.);
   return B * sqrt(1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3;
 }
+// 0 at the board's edge, 1 a bevel's width in: a stroke that runs off the board closes there like at its outline
+float edgeT(vec2 uv){ vec2 d = min(uv, 1. - uv) * uDoc; return clamp(min(d.x, d.y) / uBevel, 0., 1.); }
 /* The same form for geometry. The bevel above meets the board with a vertical wall, which a grid can't follow:
    one vertex outside, the next already high, and the silhouette lands at a different height in every cell
    (a comb along each stroke once tilted). Here the wall has a finite slope and carries on below the board
@@ -686,15 +689,30 @@ float Hg(vec2 uv){
   float over = max(f.x / uA - 1., 0.);
   float B = max(min(rad, uBevel), .5);
   float t = clamp((innerE(f.x) * rad + over * rad * .6) / B, -1., 1.);
-  return B * (t < 0. ? 2. * t : 1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3;
-}`;
+  float te = edgeT(uv);
+  return min(B * (t < 0. ? 2. * t : 1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3, uBevel * (1. - (1. - te) * (1. - te)));
+}
+// the bevel, also closed off at the board's edge (for the 3D view's shading)
+float Hc(vec2 uv){ float te = edgeT(uv); return min(H(uv), uBevel * sqrt(1. - (1. - te) * (1. - te))); }`;
 // mesh = the 3D view: V comes from the real camera, and a depth pre-pass (uPass 0) lays down the solid part
 const fsComp = mesh => `#version 300 es
 precision highp float;
+${mesh ? '#define MESH' : ''}
 in vec2 vUv;
-${mesh ? 'in vec3 vP; uniform vec3 uCam; uniform int uPass;' : ''}
+#ifdef MESH
+in vec3 vP;
+uniform vec3 uCam; uniform int uPass; uniform mat3 uRot; uniform float uSide, uDepth;
+// textures are sampled at the surface's 3D position (TX), and every direction is turned into the room (OW)
+#define TX vec3
+#define OW(v) (uRot * (v))
+#define SPECK .4
+#else
+#define TX vec2
+#define OW(v) (v)
+#define SPECK .2
+#endif
 ${GL_H}
-uniform vec2 uRes, uDoc;
+uniform vec2 uRes;
 uniform float uVol;
 uniform vec3 uL;
 uniform int uBrush;
@@ -804,6 +822,111 @@ float stoneEnv(vec3 Rr, vec3 L, float g){
   return key * 1.6 + strip * .7 + card + .025 * max(Rr.z, 0.) + .004;   // dark floor: steep walls stay black
 }
 
+#ifdef MESH
+/* Solid versions for the 3D view. The 2D patterns live in the drawing's plane, so on a tilted wall they
+   smear straight down it like a slit-scan. These live in space: the surface slices through them, so pits,
+   chips, grit and speckle look the same on a top, a wall or the back. */
+float hash(vec3 p){ p = fract(p * vec3(123.34, 456.21, 789.92)); p += dot(p, p.yzx + 45.32); return fract((p.x + p.y) * p.z); }
+float vnoise(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x), mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x), mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z); }
+float fbm(vec3 p){ float s = 0., a = .5; for (int i = 0; i < 4; i++){ s += a * vnoise(p); p = p * 2.03 + 17.1; a *= .5; } return s; }
+float ihash(ivec3 c, int k){
+  uvec3 q = uvec3(c + ivec3(k * 7919, k * 104729, k * 15485863)) * uvec3(1597334673u, 3812015801u, 2798796415u);
+  return float(((q.x ^ q.y ^ q.z) * 1597334673u) >> 8) / 16777216.;
+}
+vec3 ihash3(ivec3 c, int k){ return vec3(ihash(c, k), ihash(c, k + 31), ihash(c, k + 57)); }
+// value noise with its analytic gradient (x = value, yzw = d/dp)
+vec4 noised(vec3 x){ vec3 i = floor(x), f = fract(x), u = f*f*(3.-2.*f), du = 6.*f*(1.-f);
+  float a = hash(i), b = hash(i+vec3(1,0,0)), c = hash(i+vec3(0,1,0)), d = hash(i+vec3(1,1,0));
+  float e = hash(i+vec3(0,0,1)), g = hash(i+vec3(1,0,1)), hh = hash(i+vec3(0,1,1)), k = hash(i+vec3(1,1,1));
+  float k1 = b-a, k2 = c-a, k3 = e-a, k4 = a-b-c+d, k5 = a-c-e+hh, k6 = a-b-e+g, k7 = -a+b+c-d+e-g-hh+k;
+  return vec4(a + k1*u.x + k2*u.y + k3*u.z + k4*u.x*u.y + k5*u.y*u.z + k6*u.z*u.x + k7*u.x*u.y*u.z,
+    du * vec3(k1 + k4*u.y + k6*u.z + k7*u.y*u.z, k2 + k5*u.z + k4*u.x + k7*u.z*u.x, k3 + k6*u.x + k5*u.y + k7*u.x*u.y)); }
+// craters as spherical bowls in a 3D lattice: a surface passing through one at any depth shows a pit of that size.
+// Centres stay in the middle half of their cell and bowls (with lip) reach .63 of a cell, so only the 2×2×2
+// cells on this point's side can touch it: 8 lookups instead of 27.
+vec4 craters(vec3 p, float cs, float dens, float depth, int s, out float w){
+  vec3 g = p / cs, fl = floor(g), f = g - fl;
+  ivec3 i = ivec3(fl), o0 = ivec3(step(.5, f)) - 1;
+  vec4 acc = vec4(0.); w = 0.;
+  for (int z = 0; z <= 1; z++) for (int y = 0; y <= 1; y++) for (int x = 0; x <= 1; x++) {
+    ivec3 oc = o0 + ivec3(x, y, z), id = i + oc;
+    float on = step(ihash(id, s + 7), dens);
+    vec3 d = f - vec3(oc) - (.25 + .5 * ihash3(id, s));
+    float r = mix(.2, .45, ihash(id, s + 3));
+    float l = length(d), u = l / r, inb = step(u, 1.);
+    float lip = exp(-(u - 1.) * (u - 1.) / .05);
+    float hh = inb * (.5 * (u*u + u*u*u*u) - 1.) + .28 * lip;
+    float dh = inb * (u + 2. * u*u*u) - .28 * lip * 2. * (u - 1.) / .05;
+    acc.x += on * hh * r * cs * depth;
+    acc.yzw += on * dh * depth * d / max(l, 1e-4);
+    w = max(w, on * inb * (1. - u*u));
+  }
+  return acc;
+}
+// conchoidal chips: 3D Voronoi cells, each a dished plane with its own tilt. w = squared distance to the centre
+vec4 scoops(vec3 p, float cs, float depth, int s, out float w){
+  vec3 g = p / cs, f = fract(g);
+  ivec3 i = ivec3(floor(g));
+  float d1 = 99.; vec3 v1 = vec3(0.), tl = vec3(0.);
+  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    ivec3 id = i + ivec3(x, y, z);
+    vec3 d = f - vec3(x, y, z) - (.1 + .8 * ihash3(id, s));
+    float dd = dot(d, d);
+    if (dd < d1) { d1 = dd; v1 = 2. * d; tl = ihash3(id, s + 13) * 2. - 1.; }
+  }
+  float sq = sqrt(d1) + 1e-4, ring = .0015 * cs * depth;
+  w = d1;
+  return vec4(d1 * cs * depth + ring * sin(sq * 22.), v1 * depth * .55 + tl * depth * .9 + ring * cos(sq * 22.) * 22. * v1 / (2. * sq) / cs);
+}
+vec4 stoneRelief(vec3 p, out float cav, out float bite){
+  float sc = uDScale, s = uSeed * 7.;
+  int si = int(uSeed * 97.);
+  vec4 r = vec4(0.); cav = 0.; bite = 0.;
+  if (uPits > 0.) {
+    vec3 wq = p / (14. * sc) + s;                     // two octaves of warp are plenty for lumpy rims
+    vec3 cp = p + 6. * sc * (vec3(vnoise(wq) + .5 * vnoise(wq * 2.03 + 17.1), vnoise(wq + 8.3) + .5 * vnoise(wq * 2.03 + 25.4),
+                                  vnoise(wq + 4.1) + .5 * vnoise(wq * 2.03 + 21.2)) / 1.5 - .5);
+    // a surface only meets the bowls it passes through, so the lattice is fuller than the 2D one
+    float wa, wb, wc;
+    vec4 a = craters(cp, 58. * sc, min(1., uPits), .8, si, wa);
+    vec4 b = craters(cp + 31.7, 21. * sc, min(1., .75 * uPits), .7, si + 101, wb);
+    vec4 c = craters(cp + 77.1, 6. * sc, min(1., .37 * uPits), 1.1, si + 211, wc);
+    r += a + b + c;
+    cav = max(max(wa, wb * .85), wc);
+    bite += uPits * .45 * max(wa, wb * .6);
+  }
+  if (uFacets > 0.) {
+    vec3 q = p / (70. * sc) + s;
+    vec3 wp = p + 12. * sc * (vec3(vnoise(q), vnoise(q + 5.2), vnoise(q + 2.9)) - .5);
+    float w1, w2;
+    vec4 a = scoops(wp, 90. * sc, .55 * uFacets, si + 307, w1);
+    vec4 b = scoops(wp + 13.3, 30. * sc, .3 * uFacets, si + 401, w2);
+    r += a + b * .3;
+    bite += uFacets * .3 * (1. - smoothstep(0., .3, w1));
+  }
+  if (uGrain > 0.) {
+    float fq = 1. / (5. * sc), amp = 1.8 * sc * uGrain;
+    for (int k = 0; k < 4; k++) { vec4 n = noised(p * fq + s + float(k) * 13.7); r += vec4(n.x * amp, n.yzw * amp * fq); fq *= 2.1; amp *= .5; }
+  }
+  return r * uRelief;
+}
+vec3 jit(vec3 p, float o){ return vec3(vnoise(p) - .5, vnoise(p + o) - .5, vnoise(p + o * 1.7) - .5); }
+vec3 rnd(vec3 c){ return vec3(hash(c + 3.1), hash(c + 7.7), hash(c + 5.3)); }
+vec3 tang(vec3 v, vec3 n){ return v - dot(v, n) * n; }       // bumps tilt the normal, never lengthen it
+#else
+vec3 jit(vec2 p, float o){ return vec3(vnoise(p) - .5, vnoise(p + o) - .5, 0.); }
+vec2 rnd(vec2 c){ return vec2(hash(c + 3.1), hash(c + 7.7)); }
+vec3 tang(vec3 v, vec3 n){ return v; }
+#endif
+float lump(TX p){ return vnoise(p) + .5 * vnoise(p * 2.1 + 3.3); }
+#ifdef MESH
+vec3 lumpGrad(vec3 p, float l0){ return vec3(l0 - lump(p + vec3(.3, 0., 0.)), l0 - lump(p + vec3(0., .3, 0.)), l0 - lump(p + vec3(0., 0., .3))); }
+#else
+vec3 lumpGrad(vec2 p, float l0){ return vec3(l0 - lump(p + vec2(.3, 0.)), l0 - lump(p + vec2(0., .3)), 0.); }
+#endif
+
 void main(){
   lnA = log(uA);
   vec2 uv = vUv;
@@ -811,9 +934,15 @@ void main(){
   float R = c.x;
   float fw = max(fwidth(R), 1e-4);
   vec2 doc = vec2(uv.x, 1. - uv.y) * uDoc;
+#ifdef MESH
+  vec3 tx = vP;
+#else
+  vec2 tx = doc;
+#endif
 
   // optional soft cast shadow (off by default: the references carry depth in the material alone)
   float shA = 0.;
+#ifndef MESH
   if (uShadow > 0.) {
     vec2 tl = normalize(uL.xy + vec2(1e-5));
     vec2 so = vec2(tl.x, -tl.y) * uShadowDist / uDoc;
@@ -821,10 +950,17 @@ void main(){
     float rs = .25 * (F(uv + so + sp).x + F(uv + so - sp).x + F(uv + so * 1.5).x + F(uv + so * .6).x);
     shA = clamp(max(smoothstep(.06, 1.3, rs) * .5, smoothstep(.3, 1., R) * .28) * uShadow, 0., 1.);
   }
+#endif
 
   // stone relief is needed before coverage: craters and scoops chip the silhouette
+#ifdef MESH
+  vec4 rel = vec4(0.); float cav = 0., bite = 0.;
+  if (uBrush == 2 && R > .6 && uPass == 1) rel = stoneRelief(tx, cav, bite);   // the depth pass skips it
+  bite = 0.;       // chipping the outline is a 2D trick; on the tall 3D walls it punches holes
+#else
   vec3 rel = vec3(0.); float cav = 0., bite = 0.;
   if (uBrush == 2 && R > .6) rel = stoneRelief(doc, cav, bite);
+#endif
   float a = clamp((R - bite - 1.) / (fw * 1.5) + .5, 0., 1.);
   ${mesh ? 'if (uPass == 0) { if (a < .5) discard; o = vec4(0.); return; }' : ''}
   if (a <= 0. && shA < .002) { o = vec4(0.); return; }
@@ -836,33 +972,38 @@ void main(){
     float hl = H(uv - vec2(t.x, 0.)), hR = H(uv + vec2(t.x, 0.));
     float hu = H(uv + vec2(0., t.y)), hd = H(uv - vec2(0., t.y));
     vec3 N0 = normalize(vec3(-(hR - hl) / tDoc * uVol, -(hd - hu) / tDoc * uVol, 1.));
+#ifdef MESH
+    // the surface at its real height (× Depth), on this side of the stroke, turned into the room. Shaded with
+    // the round bevel rather than the mesh's own profile: its normal lies flat at the rim, so the two halves
+    // of a stroke shade as one rounded body instead of meeting at a crease
+    float k3 = uVol * uDepth;
+    float cl = Hc(uv - vec2(t.x, 0.)), cr = Hc(uv + vec2(t.x, 0.)), cu = Hc(uv + vec2(0., t.y)), cd = Hc(uv - vec2(0., t.y));
+    N0 = OW(normalize(vec3(-(cr - cl) / tDoc * k3, -(cd - cu) / tDoc * k3, uSide)));
+#endif
     vec3 N = N0;
-    vec3 L = uL, V = ${mesh ? 'normalize(uCam - vP)' : 'vec3(0., 0., 1.)'};
+    vec3 L = uL, V = ${mesh ? 'OW(normalize(uCam - vP))' : 'vec3(0., 0., 1.)'};
     vec2 Lxy = normalize(L.xy + vec2(1e-5));
     float rad = c.y / max(c.x, 1e-4) * 64.;
     float e0 = innerE(max(R, 1.0001));
-    float wob = fbm(doc / 120. + uSeed) - .5;
+    float wob = fbm(tx / 120. + uSeed) - .5;
     // fine photographic grain: two octaves of ~1 doc-px noise
-    float gn = (hash(floor(doc * 1.4) + uSeed) - .5) * .9 + (vnoise(doc / 1.6 + uSeed * 3.1) - .5) * .7;
+    float gn = (hash(floor(tx * 1.4) + uSeed) - .5) * .9 + (vnoise(tx / 1.6 + uSeed * 3.1) - .5) * .7;
 
     if (uBrush == 0) {
       // ── glazed ceramic / slip ──
-      vec2 op = doc / 2.8 + uSeed;
-      N = normalize(N + vec3(vnoise(op) - .5, vnoise(op + 9.1) - .5, 0.) * uGrain * .08);
-      vec2 lp = doc / 30. + uSeed * 5.;                                 // gentle hand-made lumps
-      float l0 = vnoise(lp) + .5 * vnoise(lp * 2.1 + 3.3);
-      float lx = vnoise(lp + vec2(.3, 0.)) + .5 * vnoise((lp + vec2(.3, 0.)) * 2.1 + 3.3);
-      float ly = vnoise(lp + vec2(0., .3)) + .5 * vnoise((lp + vec2(0., .3)) * 2.1 + 3.3);
-      N = normalize(N + vec3(l0 - lx, l0 - ly, 0.) * (.1 + .2 * uGrain) * smoothstep(0., .35, e0));
-      float mott = fbm(doc / 34. + uSeed * 2.) - .5;
+      TX op = tx / 2.8 + uSeed;
+      N = normalize(N + tang(OW(jit(op, 9.1)), N) * uGrain * .08);
+      TX lp = tx / 30. + uSeed * 5.;                                    // gentle hand-made lumps
+      N = normalize(N + tang(OW(lumpGrad(lp, lump(lp))), N) * (.1 + .2 * uGrain) * smoothstep(0., .35, e0));
+      float mott = fbm(tx / 34. + uSeed * 2.) - .5;
       vec3 base = uC0;
       float thin = 1. - smoothstep(.1, .8, e0);
       vec3 brk = mix(base, vec3(1., .84, .62), .4);               // glaze breaks warm & pale on thin edges
       vec3 alb = mix(base, brk, thin * uBreak * .8);
       alb *= 1. + mott * .035 * (.35 + uGrain) + gn * .02 * uGrain;
-      vec2 cell = floor(doc / 4.2), fc = fract(doc / 4.2);          // iron speckle
-      float on = step(1. - uSpeckle * .2, hash(cell + uSeed));
-      vec2 cp = vec2(hash(cell + 3.1), hash(cell + 7.7)) * .6 + .2;
+      TX cell = floor(tx / 4.2), fc = fract(tx / 4.2);              // iron speckle
+      float on = step(1. - uSpeckle * SPECK, hash(cell + uSeed));
+      TX cp = rnd(cell) * .6 + .2;
       float rr = .1 + .26 * hash(cell + 11.3);
       alb = mix(alb, vec3(.035, .025, .02), on * (1. - smoothstep(rr * .55, rr, length(fc - cp))) * .9);
       float ndl = dot(N, L);
@@ -879,9 +1020,13 @@ void main(){
       col += alb * .07 * smoothstep(.55, 1., 1. - N.z) * away;      // bounce light on the shadow rim
     } else if (uBrush == 2) {
       // ── stone: comet pit / obsidian ──
+#ifdef MESH
+      N = normalize(N0 - tang(OW(rel.yzw), N0));
+#else
       N = normalize(vec3(N0.xy / N0.z - rel.yz, 1.));
-      float mott = fbm(doc / (16. * uDScale) + uSeed) - .5;
-      float fleck = hash(floor(doc / 1.6) + uSeed) - .5;            // granular light and dark flecks
+#endif
+      float mott = fbm(tx / (16. * uDScale) + uSeed) - .5;
+      float fleck = hash(floor(tx / 1.6) + uSeed) - .5;            // granular light and dark flecks
       vec3 alb = uC0 * (1. + mott * .5 * uGrain + gn * .1 * uGrain + fleck * .4 * uGrain);
       alb *= 1. - cav * .65;                                         // crater floors sit in shadow and dust
       float ndl = dot(N, L);
@@ -894,8 +1039,8 @@ void main(){
       col += spec * uShine * (1. - cav * .7);
     } else {
       // ── liquid metal ──
-      vec2 np = doc / 6. + uSeed;
-      N = normalize(N + vec3(vnoise(np) - .5, vnoise(np + 31.7) - .5, 0.) * uRough * .9);
+      TX np = tx / 6. + uSeed;
+      N = normalize(N + tang(OW(jit(np, 31.7)), N) * uRough * .9);
       vec3 Rr = reflect(-V, N);
       float tilt = 1. - N.z;                                         // 0 = flat top, 1 = vertical wall
       float side = dot(normalize(N.xy + 1e-5), Lxy) * smoothstep(.0, .2, tilt);
@@ -906,7 +1051,7 @@ void main(){
       float w = max(.015, min(turn, .06));                            // boundary stays crisp; Banding only shapes the palette
       float t1 = .11 + wob * .05;
       float tt = smoothstep(t1 - w - .012, t1 + w + .012, tilt);
-      float dn = hash(floor(doc * 1.7) + uSeed * 1.3) - .5;              // crisp per-pixel dither, like film grain
+      float dn = hash(floor(tx * 1.7) + uSeed * 1.3) - .5;              // crisp per-pixel dither, like film grain
       tt = clamp(tt + dn * 1.1 * uGrain * (1. - abs(2. * tt - 1.)), 0., 1.);   // grain only dithers the boundary
       float top = uSky + wob * .2 + gn * .14 * uGrain + .1 * clamp(side * 4., -1., 1.) * smoothstep(0., t1, tilt);
       // bevel profile sampled from the reference: away from the light it brightens toward the outer edge,
@@ -944,14 +1089,14 @@ ${GL_H}
 uniform sampler2D uStack;
 uniform int uHasStack;
 uniform mat4 uMVP;
-uniform vec2 uDoc;
-uniform float uVol, uDepth, uLift;
+uniform float uVol, uDepth, uLift, uSide;
 out vec2 vUv; out vec3 vP;
 void main(){
   lnA = log(uA);
   vUv = aUv;
   float z = Hg(aUv) * uVol * uDepth + uLift;
   if (uHasStack == 1) z += texture(uStack, aUv).r;
+  z *= uSide;
   vP = vec3(aUv.x * uDoc.x, (1. - aUv.y) * uDoc.y, z);
   gl_Position = uMVP * vec4(vP, 1.);
 }`;
@@ -1329,7 +1474,7 @@ function lightDir(deg, el = .66) {
 function hUniforms(u, L, tex) {
   const P = L.params;
   bindTex(0, tex); gl.uniform1i(u.uField, 0);
-  gl.uniform1f(u.uInv, 1 / FIELD.scale);
+  gl.uniform1f(u.uInv, 1 / FIELD.scale); gl.uniform2f(u.uDoc, doc.w, doc.h);
   gl.uniform1f(u.uA, mergeA(P.merge));
   gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, L.brush === 'metal' ? 0 : L.brush === 'stone' ? .3 : .5);
 }
@@ -1373,10 +1518,10 @@ function compositeScreen() {
    ════════════════════════════════════════════════════════════════════ */
 // Object space is doc px (x right, y down) with z towards the viewer; the camera sees it through a y flip.
 // At rx = ry = 0 the board lands exactly where the 2D board sits, so entering and leaving can glide.
-const three = { on: false, leaving: false, rx: 0, ry: 0, zoom: 1, panX: 0, panY: 0, vrx: 0, vry: 0, anim: null, t: 0 };
+const three = { on: false, leaving: false, rx: 0, ry: 0, zoom: 1, panX: 0, panY: 0, vrx: 0, vry: 0, anim: null, t: 0, touched: 0 };
 const POSE = { rx: -.62, ry: .38, zoom: .8, panX: 0, panY: 0 };
 const POSE_KEYS = Object.keys(POSE);
-const TILT = 1.35;          // ±77°: past that you'd be looking at the slab's edge
+const TILT = 1.45;          // tilt stops short of straight overhead; the turn (ry) goes all the way round
 const SLAB = .025;          // slab thickness, as a fraction of the board's width (also the printed base)
 const FOV = .5;
 const M4 = {
@@ -1399,14 +1544,21 @@ function camera3D(w, hgt) {
   const cx = Math.cos(three.rx), sx = Math.sin(three.rx), cy = Math.cos(three.ry), sy = Math.sin(three.ry);
   const rotT = ([x, y, z]) => { const y1 = cx * y + sx * z, z1 = -sx * y + cx * z; return [cy * x - sy * z1, y1, sy * x + cy * z1]; };
   const toObj = v => { const r = rotT([v[0], -v[1], v[2]]); return [r[0], -r[1], r[2]]; };
-  const e = rotT([0, 0, dist]);
-  return { mvp: m, eye: [e[0] + doc.w / 2, -e[1] + doc.h / 2, e[2]], toObj };
+  const e = rotT([0, 0, dist]), R = M4.mul(M4.rx(three.rx), M4.ry(three.ry)), rot = new Float32Array(9);
+  for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) rot[c * 3 + r] = R[c * 4 + r] * ((r === 1) !== (c === 1) ? -1 : 1);
+  // device px per doc px at the board's centre: how fine the mesh needs to be
+  const ppd = hgt / (2 * Math.tan(FOV / 2) * dist);
+  return { mvp: m, eye: [e[0] + doc.w / 2, -e[1] + doc.h / 2, e[2]], toObj, rot, ppd };
 }
 
-// one grid shared by every layer, ~512 cells on the long side
+/* One grid shared by every layer, about 7 screen px per cell. Finer is wasted: a GPU shades pixels in 2×2
+   blocks per triangle, so pixel-sized triangles cost several times the pixels they cover. Steps keep a
+   zoom from rebuilding it every frame. */
 let grid = null;
-function ensureGrid() {
-  const cell = Math.max(doc.w, doc.h) / 512, nx = Math.ceil(doc.w / cell), ny = Math.ceil(doc.h / cell);
+const GRID_STEPS = [96, 128, 192, 256, 384, 512];
+function ensureGrid(ppd) {
+  const want = Math.max(doc.w, doc.h) * ppd / 7, cells = GRID_STEPS.find(n => n >= want) || 512;
+  const cell = Math.max(doc.w, doc.h) / cells, nx = Math.ceil(doc.w / cell), ny = Math.ceil(doc.h / cell);
   if (grid && grid.nx === nx && grid.ny === ny) return grid;
   if (grid) { gl.deleteVertexArray(grid.vao); gl.deleteBuffer(grid.vb); gl.deleteBuffer(grid.ib); }
   const uv = new Float32Array((nx + 1) * (ny + 1) * 2), idx = new Uint32Array(nx * ny * 6);
@@ -1423,6 +1575,25 @@ function ensureGrid() {
   gl.bindVertexArray(null);
   return grid = { nx, ny, vao, vb, ib, n: idx.length };
 }
+// the rows of the grid a layer's strokes can reach (rows are contiguous in the index buffer, so one draw
+// covers them); cached until the layer's strokes or size change
+const rowSpan = new WeakMap();
+function layerRows(L, g) {
+  const key = L.strokes.length + ':' + L.params.size + ':' + g.ny + ':' + doc.h;
+  let c = rowSpan.get(L);
+  if (c && c.key === key) return c;
+  let y0 = Infinity, y1 = -Infinity, all = false;
+  for (const st of L.strokes) {
+    if (st.erase) continue;
+    if (st.sym && st.sym !== 'off' && st.sym !== 'x') { all = true; break; }
+    for (let i = 1; i < st.pts.length; i += 5) { const y = st.pts[i]; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  const pad = L.params.size * 2.5 + (L.params.edge ?? 40) + 20;   // swelling, pools, drops and the bevel
+  const j0 = all ? 0 : clamp(Math.floor((y0 - pad) / doc.h * g.ny), 0, g.ny), j1 = all ? g.ny : clamp(Math.ceil((y1 + pad) / doc.h * g.ny), j0, g.ny);
+  c = { key, count: (j1 - j0) * g.nx * 6, offset: j0 * g.nx * 6 * 4 };
+  rowSpan.set(L, c);
+  return c;
+}
 // the board as a box: top face at z = 0, four sides down to the slab's thickness
 let slab = null;
 function ensureSlab() {
@@ -1436,6 +1607,7 @@ function ensureSlab() {
   quad([[0, Hh, 0], [W, Hh, 0], [W, Hh, D], [0, Hh, D]], [0, 1, 0], [[0, 1], [1, 1], [1, 1], [0, 1]]);
   quad([[0, 0, 0], [0, Hh, 0], [0, Hh, D], [0, 0, D]], [-1, 0, 0], [[0, 0], [0, 1], [0, 1], [0, 0]]);
   quad([[W, 0, 0], [W, Hh, 0], [W, Hh, D], [W, 0, D]], [1, 0, 0], [[1, 0], [1, 1], [1, 1], [1, 0]]);
+  quad([[0, 0, D], [W, 0, D], [W, Hh, D], [0, Hh, D]], [0, 0, -1], [[0, 0], [1, 0], [1, 1], [0, 1]]);
   const vao = gl.createVertexArray(), vb = gl.createBuffer();
   gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0);
@@ -1445,7 +1617,7 @@ function ensureSlab() {
   return slab = { w: W, h: Hh, vao, vb, n: v.length / 8 };
 }
 // multisampled colour + depth (the canvas itself has neither), resolved onto the canvas each frame
-let MS = null, stackT = null;
+let MS = null, stackTs = [];
 function ensureMS(w, hgt) {
   if (MS && MS.w === w && MS.h === hgt) return MS;
   freeMS();
@@ -1457,30 +1629,43 @@ function ensureMS(w, hgt) {
   gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, c);
   gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, d);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  return MS = { fb, c, d, w, h: hgt };
+  return MS = { fb, c, d, w, h: hgt, lo: makeTarget(w, hgt, FMT8) };
 }
 function freeMS() {
-  if (MS) { gl.deleteFramebuffer(MS.fb); gl.deleteRenderbuffer(MS.c); gl.deleteRenderbuffer(MS.d); MS = null; }
-  freeTarget(stackT); stackT = null;
+  if (MS) { gl.deleteFramebuffer(MS.fb); gl.deleteRenderbuffer(MS.c); gl.deleteRenderbuffer(MS.d); freeTarget(MS.lo); MS = null; }
+  stackTs.forEach(freeTarget); stackTs = [];
 }
-// summed heights of the layers drawn so far, so each layer stands on the ones below. Needs a float field;
-// on 8-bit-only GPUs layers simply all start from the board.
-function stackTarget() {
-  if (FIELD.scale !== 1) return null;
-  if (!stackT || stackT.w !== T.w || stackT.h !== T.h) { freeTarget(stackT); stackT = makeTarget(T.w, T.h, FIELD); }
-  return stackT;
+/* What each visible layer stands on: stacks[k] = the summed heights of layers 0..k-1. All built before the
+   3D pass, because switching framebuffers in the middle of it makes a tiled GPU (every Apple device) write
+   the whole multisampled colour and depth out and read them back each time. Needs a float field; on
+   8-bit-only GPUs layers all start from the board. */
+function buildStacks(layers) {
+  if (FIELD.scale !== 1 || layers.length < 2) return null;
+  if (stackTs.length && (stackTs[0].w !== T.w || stackTs[0].h !== T.h)) { stackTs.forEach(freeTarget); stackTs = []; }
+  while (stackTs.length < layers.length) stackTs.push(makeTarget(T.w, T.h, FIELD));
+  clearTarget(stackTs[0]);
+  for (let k = 1; k < layers.length; k++) {
+    const L = layers[k - 1];
+    copyInto(stackTs[k - 1], stackTs[k]);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    fullscreen(PR.hgt, stackTs[k], u => { hUniforms(u, L, layerTarget(L).tex); gl.uniform1f(u.uK, L.params.vol * ui.depth); gl.uniform1f(u.uEnc, 0); });
+    gl.disable(gl.BLEND);
+  }
+  return stackTs;
 }
 
-function render3D(out) {
-  const w = out ? out.w : canvas.width, hgt = out ? out.h : canvas.height;
-  const ms = ensureMS(w, hgt), cam = camera3D(w, hgt), g = ensureGrid(), stack = stackTarget();
-  if (stack) clearTarget(stack);
+// scale < 1 renders fewer pixels and stretches them onto the canvas: used while the drawing is moving
+function render3D(out, scale = 1) {
+  const W = out ? out.w : canvas.width, Hh = out ? out.h : canvas.height;
+  const w = Math.round(W * scale), hgt = Math.round(Hh * scale);
+  const layers = doc.layers.filter(L => L.visible && L.strokes.length);
+  const ms = ensureMS(W, Hh), cam = camera3D(W, Hh), g = ensureGrid(cam.ppd), stacks = buildStacks(layers);
   gl.bindFramebuffer(gl.FRAMEBUFFER, ms.fb); gl.viewport(0, 0, w, hgt);
   gl.colorMask(true, true, true, true); gl.depthMask(true);
   gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.BLEND);
   const key = cam.toObj(lightDir(120));
-  if (doc.bgImage || doc.bg !== 'none') {
+  if (ui.canvas3d && (doc.bgImage || doc.bg !== 'none')) {
     ensureImgTex();
     const s = ensureSlab(), u = PR.slab.u, c = doc.bg === 'none' ? [1, 1, 1] : hexRgb(doc.bg);
     gl.useProgram(PR.slab.p);
@@ -1489,44 +1674,51 @@ function render3D(out) {
     gl.uniform1i(u.uImg, doc.bgImage ? 1 : 0); bindTex(0, imgTex); gl.uniform1i(u.uTex, 0);
     gl.bindVertexArray(s.vao); gl.drawArrays(gl.TRIANGLES, 0, s.n);
   }
-  let k = 0;
-  for (const L of doc.layers) {
-    if (!L.visible || !L.strokes.length) continue;
-    const tex = layerTarget(L).tex, u = PR.mesh.u, K = L.params.vol * ui.depth;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, ms.fb); gl.viewport(0, 0, w, hgt); gl.enable(gl.DEPTH_TEST);
-    gl.useProgram(PR.mesh.p);
-    const Ld = layerUniforms(u, L, tex, T.w, T.h);
-    gl.uniform3f(u.uL, ...cam.toObj(Ld));         // the light stays put while the drawing turns under it
-    gl.uniform3f(u.uCam, ...cam.eye);
-    gl.uniformMatrix4fv(u.uMVP, false, cam.mvp);
-    bindTex(1, stack ? stack.tex : null); gl.uniform1i(u.uStack, 1); gl.uniform1i(u.uHasStack, stack ? 1 : 0);
-    gl.uniform1f(u.uDepth, ui.depth); gl.uniform1f(u.uLift, .6 + .3 * ++k);   // soft edges stay above what's under them
-    gl.bindVertexArray(g.vao);
-    // depth from the solid part only, then colour over it: soft edges blend without punching holes
-    gl.uniform1i(u.uPass, 0); gl.colorMask(false, false, false, false);
-    gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0);
-    gl.uniform1i(u.uPass, 1); gl.colorMask(true, true, true, true); gl.depthMask(false);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0);
-    gl.disable(gl.BLEND); gl.depthMask(true);
-    if (stack) {
-      gl.disable(gl.DEPTH_TEST);
-      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-      fullscreen(PR.hgt, stack, uh => { hUniforms(uh, L, tex); gl.uniform1f(uh.uK, K); gl.uniform1f(uh.uEnc, 0); });
-      gl.disable(gl.BLEND);
+  /* Depth for every layer and side first, then colour: only the surface in front gets shaded, which matters
+     once the canvas is off and each stroke has two halves overlapping on screen. Depth comes from the solid
+     part only, so soft edges blend over what's behind them without punching holes. */
+  const u = PR.mesh.u, sides = ui.canvas3d ? [1] : [1, -1];   // off the canvas each stroke gets its mirrored underside
+  gl.useProgram(PR.mesh.p);
+  gl.uniformMatrix3fv(u.uRot, false, cam.rot);
+  gl.uniform3f(u.uCam, ...cam.eye);
+  gl.uniformMatrix4fv(u.uMVP, false, cam.mvp);
+  gl.uniform1f(u.uDepth, ui.depth);
+  gl.bindVertexArray(g.vao);
+  for (const pass of [0, 1]) {
+    gl.uniform1i(u.uPass, pass);
+    if (pass) { gl.colorMask(true, true, true, true); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
+    else { gl.colorMask(false, false, false, false); gl.depthMask(true); gl.disable(gl.BLEND); }
+    for (const [i, L] of layers.entries()) {
+      layerUniforms(u, L, layerTarget(L).tex, T.w, T.h);      // the light stays put in the room while the drawing turns
+      bindTex(1, stacks ? stacks[i].tex : null); gl.uniform1i(u.uStack, 1); gl.uniform1i(u.uHasStack, stacks ? 1 : 0);
+      // on the canvas, soft edges are lifted clear of what's under them; off it, the two halves meet at the rim
+      gl.uniform1f(u.uLift, ui.canvas3d ? .6 + .3 * (i + 1) : .03 * (i + 1));
+      const rows = layerRows(L, g);
+      if (rows.count) for (const side of sides) { gl.uniform1f(u.uSide, side); gl.drawElements(gl.TRIANGLES, rows.count, gl.UNSIGNED_INT, rows.offset); }
     }
   }
+  gl.disable(gl.BLEND); gl.colorMask(true, true, true, true); gl.depthMask(true);
   gl.disable(gl.DEPTH_TEST);
   gl.bindVertexArray(null);
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, ms.fb);
-  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, out ? out.fb : null);
-  gl.blitFramebuffer(0, 0, w, hgt, 0, 0, w, hgt, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  if (scale === 1) {
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, out ? out.fb : null);
+    gl.blitFramebuffer(0, 0, w, hgt, 0, 0, w, hgt, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  } else {
+    // a multisampled resolve can't scale, so resolve at the small size first, then stretch
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, ms.lo.fb);
+    gl.blitFramebuffer(0, 0, w, hgt, 0, 0, w, hgt, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, ms.lo.fb);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, out ? out.fb : null);
+    gl.blitFramebuffer(0, 0, w, hgt, 0, 0, W, Hh, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
 // glides (enter, leave, reset, zoom steps) and the drift after a flick; true while something still moves
 const pose = () => Object.fromEntries(POSE_KEYS.map(k => [k, three[k]]));
 function animate3D(to, done, dur = 850) {
+  if (to.ry != null) { const d = three.ry - to.ry; three.ry = to.ry + d - 2 * Math.PI * Math.round(d / (2 * Math.PI)); }   // the short way round
   three.anim = { t0: performance.now(), dur, from: pose(), to: { ...pose(), ...to }, done };
   three.vrx = three.vry = 0;
   request();
@@ -1540,7 +1732,7 @@ function step3D(now) {
     for (const k of POSE_KEYS) three[k] = lerp(a.from[k], a.to[k], e);
     if (t >= 1) { three.anim = null; if (a.done) a.done(); } else moving = true;
   } else if (three.vrx || three.vry) {
-    three.rx = clamp(three.rx + three.vrx * dt, -TILT, TILT); three.ry = clamp(three.ry + three.vry * dt, -TILT, TILT);
+    three.rx = clamp(three.rx + three.vrx * dt, -TILT, TILT); three.ry += three.vry * dt;
     const f = Math.exp(-dt / 260); three.vrx *= f; three.vry *= f;
     if (Math.hypot(three.vrx, three.vry) < 2e-5) three.vrx = three.vry = 0; else moving = true;
   }
@@ -1595,6 +1787,7 @@ function orbitDown(e) {
 function orbitMove(e) {
   const p = orbit.ptrs.get(e.pointerId);
   if (!p) return;
+  three.touched = performance.now();
   p.x = e.clientX; p.y = e.clientY;
   const ps = [...orbit.ptrs.values()], c = centroid(ps);
   if (ps.length !== orbit.n) { orbitStart(); return; }
@@ -1605,7 +1798,7 @@ function orbitMove(e) {
   } else if (orbit.pan) {
     three.panX = orbit.px0 + dx; three.panY = orbit.py0 + dy;
   } else {
-    three.ry = clamp(orbit.ry0 + dx * .006, -TILT, TILT); three.rx = clamp(orbit.rx0 + dy * .006, -TILT, TILT);
+    three.ry = orbit.ry0 + dx * .006; three.rx = clamp(orbit.rx0 + dy * .006, -TILT, TILT);
     const now = e.timeStamp, dt = now - orbit.lt;
     if (dt > 0) {
       orbit.vrx = lerp(orbit.vrx, (three.rx - orbit.lrx) / dt, .6); orbit.vry = lerp(orbit.vry, (three.ry - orbit.lry) / dt, .6);
@@ -1641,7 +1834,12 @@ function frame() {
   dirty.clear();
   if (drawing) renderLive(drawing.L, drawing.st);
   const moving = three.on && step3D(t0);       // may finish leaving 3D, so check again before drawing
-  if (three.on) render3D(); else compositeScreen();
+  if (three.on) {
+    const busy = moving || t0 - three.touched < 140;
+    render3D(null, busy ? .6 : 1);
+    clearTimeout(three.settle);
+    if (busy && !moving) three.settle = setTimeout(request, 160);   // the sharp frame once hands come off
+  } else compositeScreen();
   needsDraw = false;
   lastMs = lastMs ? lerp(lastMs, performance.now() - t0, .2) : performance.now() - t0;
   updateStat();
@@ -1725,10 +1923,11 @@ addEventListener('wheel', e => {
   if (three.on) {                                   // scroll turns the drawing, pinch / ⌘-scroll zooms
     e.preventDefault();
     if (three.leaving) return;
+    three.touched = performance.now();
     if (e.metaKey || e.ctrlKey) zoom3D(Math.exp(-e.deltaY * unit * (e.ctrlKey && !e.metaKey ? .01 : .0025)));
     else {
       three.anim = null; three.vrx = three.vry = 0;
-      three.ry = clamp(three.ry - e.deltaX * unit * .004, -TILT, TILT); three.rx = clamp(three.rx - e.deltaY * unit * .004, -TILT, TILT);
+      three.ry -= e.deltaX * unit * .004; three.rx = clamp(three.rx - e.deltaY * unit * .004, -TILT, TILT);
       request();
     }
     return;
@@ -1866,7 +2065,7 @@ function savePrefs() {
   if (isLab || !prefsReady) return;
   try {
     localStorage.setItem(KEY, JSON.stringify({ v: 2, cur: session ? session.id : null, last: lastParams,
-      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
+      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, canvas3d: ui.canvas3d, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
   } catch (e) {}
 }
 function save() {
@@ -2002,6 +2201,7 @@ function loadPrefs() {
   if (d.v === 1) for (const b of BRUSHES) for (const k of GEOM) if (k !== 'taper') lastParams[b][k] = DEF[b][k];
   if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
   if (!TOOLS.includes(ui.brush)) ui.brush = 'stone';
+  ui.depth = clamp(+ui.depth || 3, 1, 3);
   if (ui.tool !== 'erase' && !TOOLS.includes(ui.tool)) ui.tool = ui.brush;
   if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
   // v1 kept the one drawing in localStorage; it becomes the first session
@@ -2967,10 +3167,12 @@ async function exportModel(kind) {
 }
 function viewControls() {
   return [sec('3D view'),
-    slider({ label: 'Depth', min: 1, max: 12, step: .1, suf: '×', hist: false, get: () => ui.depth, set: v => { ui.depth = v; request(); save(); } }),
+    slider({ label: 'Depth', min: 1, max: 3, step: .05, suf: '×', hist: false, get: () => ui.depth, set: v => { ui.depth = v; request(); save(); } }),
+    toggleRow('Canvas', () => ui.canvas3d, v => { ui.canvas3d = v; request(); }),
+    hint('Without the canvas each stroke is a whole object with an underside, so you can turn it right round. Depth 1× keeps ropes round.'),
     hint(isTouchUI
-      ? 'Drag to turn the drawing. Pinch to zoom, two fingers to move it. Fit returns to the starting angle.'
-      : 'Drag or scroll to turn · right-drag or <kbd>Space</kbd>-drag to move · pinch or <kbd>⌘</kbd>+scroll to zoom · <kbd>0</kbd> starting angle · <kbd>3</kbd> back to drawing'),
+      ? 'Drag to turn the drawing, all the way round if you like. Pinch to zoom, two fingers to move it. Fit returns to the starting angle.'
+      : 'Drag or scroll to turn, all the way round · right-drag or <kbd>Space</kbd>-drag to move · pinch or <kbd>⌘</kbd>+scroll to zoom · <kbd>0</kbd> starting angle · <kbd>3</kbd> back to drawing'),
     sec('Model'),
     h('div', { class: 'btnrow' },
       h('button', { type: 'button', class: 'btn', onclick: () => exportModel('stl') }, 'Export STL'),
@@ -3062,7 +3264,7 @@ boot();
 // leaving the app (home button, app switcher): write now rather than after the debounce
 addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
 addEventListener('pagehide', () => saveNow());
-window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, T, view, applyView, zoomToPct, dirty, renderPanel, three, animate3D, heightGrid,
+window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, T, view, applyView, zoomToPct, dirty, renderPanel, three, animate3D, heightGrid, render3D,
   stamps(st, P) { const b = new FBuf(); strokeStamps(st, P, b, doc.w, doc.h, .5); return Array.from(b.a.subarray(0, b.n)); },
   setDoc(d) { doc = d; gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); } };
 if (/[?&]lab=/.test(location.search)) document.body.append(h('script', { src: 'dev/lab.js' }));   // local A/B against reference images (dev only)
