@@ -27,7 +27,7 @@ The first pass looked like a Photoshop bevel-and-emboss with a drop shadow. Matc
 - Apple Pencil / tablets: pressure, tilt (altitude), coalesced samples, hover ring. Once a Pencil is seen, fingers only navigate; broad contacts are ignored as palms.
 - Force Touch trackpad: real pressure via Safari's `webkitmouseforcechanged`.
 - Mouse: no sensor, so speed and dwell stand in (slow = thicker, holding still pools a drop).
-- iPad gestures: two-finger tap undo, three-finger tap redo, pinch to zoom.
+- iPad gestures: two-finger tap undo, three-finger tap redo (in 2D and 3D), pinch to zoom.
 
 ## Stone (round 3): Comet Pit and Obsidian
 After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface* and *Ominous Obsidian*. A third brush, **Stone**, with one procedural shader. Comet Pit is its first preset (plus Ketchup, a glossy red that replaced Obsidian, and Pumice, Moon, Basalt, Meteorite), so the pill gains one button rather than two.
@@ -76,3 +76,18 @@ After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface
 - **Depth** is 1–3× (was 1–12×).
 - **Speed** (WebKit on an Apple GPU, 1732×2160, 4× MSAA): switching framebuffers mid-pass made the tiled GPU write out and reload the whole multisampled target per layer, ~10 ms each. The layers' height stacks are now built before the 3D pass, depth is laid down for everything before any shading, the grid is ~7 screen px per cell and only covers each layer's rows, and frames render at 60% while the view moves. Default view ~11 ms (canvas on) / ~16 ms (off); zoomed in 20 / 36 ms.
 - Exports are unchanged: STL is still the tile; GLB still carries the flat 2D render as its texture.
+
+## Round 8: close-up, canvas toggle by the 3D button, sturdier taps
+- **Close-up rendering.** Zoomed past what a whole-board canvas can hold (the field size is capped by memory), the old canvas was a bitmap magnified by CSS, so 200% looked soft and blocky. Now the canvas leaves the board's size and covers the window at the screen's own resolution, and the material shader draws only the part of the board in view (`uView`). The fields keep their resolution; edges, grit, speckle and glints are shaded per screen pixel. Panning and zooming re-shade the view without rebuilding any field, and an eased zoom covers where it starts as well, so the glide never shows a bare edge. At fit (and anywhere the board canvas is already sharp) nothing changes.
+- **Canvas toggle** moved from the View tab to a small chip that rises just above the 3D button while 3D is on (key `C`).
+- **Taps:** a tap now counts every finger that came down, not just the most held at once, and a three-finger tap gets a little longer (480 ms) and more slack (20 px), since fingers never land or lift quite together. Taps also work in 3D. With nothing to undo or redo, the toast says so, which shows the gesture was read.
+
+## Round 9: lasso and move, turning the board, duplicating layers
+- **Off the board is kept.** Strokes have always been stored as raw samples with nothing clipped at the edge, so whatever runs past the board is still there; the board just doesn't show it. The lasso can now bring it back.
+- **Lasso** is a tool (key `L`). Circle something and marching ants mark it; drag inside to move it, anywhere, off the board included. With nothing selected, a tap selects everything in scope (including what sits off the board); a tap elsewhere lets go. `⌫` or the bin in its chip deletes, and `Esc` lets go. The chip over the tool sets the scope: **All** visible layers (default) or the active **Layer**.
+- **How a move is stored:** as an op on the layer (`{ at, poly, dx, dy, del }`), not by editing strokes. When a layer is built, every stamp of an older stroke that falls inside the lasso shifts (or is dropped, for a delete). Strokes keep every sample, the sliders still retune moved strokes, and undo is the op list. A stamp goes wholly to one side of the lasso, so a cut closes round, like the liquid it is, rather than a knife edge. While one selection is held, further drags refine the same op instead of stacking new ones; each drag is one undo step.
+- **A moved piece is laid on top.** What a move took is rebuilt on its own (a fourth field target) and added at the moment of the move. So erasures it carried only cut it, older erasures where it lands don't touch it, and strokes drawn afterwards sit above it. Layers without moves build exactly as before.
+- **Turning the board.** Two fingers twist it like paper on a desk. A pinch rarely twists on purpose, so turning only starts past 7° of twist. Within 8° of upright or a quarter turn it holds there exactly, and letting go near one settles onto it. Safari's trackpad twist works too; `R` / `⇧R` step a quarter turn, and Fit returns upright. Drawing, the brush ring, close-up and the lasso all map through the turn (`screenToDoc`). 3D starts from the upright board.
+- **Layers:** swipe a row either way past 56 px to duplicate it ("Duplicate" slides in behind the row); there's also a copy button next to the eye. The copy sits above its twin and comes up selected with the lasso, so the next drag moves only the copy.
+- **Colour fields:** a typed hex applies as soon as it's complete, not when the field loses focus, and a native picker closed without a `change` event no longer leaves its edit open. The first tap after using the native picker can still be swallowed by the browser (Chromium's popup, iPad's popover).
+

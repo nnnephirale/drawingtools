@@ -42,8 +42,12 @@ const FS_ERASE = `#version 300 es
 precision highp float; in vec2 vUv; uniform sampler2D uSrc, uE; uniform float uInv; out vec4 o;
 void main(){ vec4 f = texture(uSrc, vUv); float e = texture(uE, vUv).r * uInv; o = vec4(f.rg * clamp(1. - e, 0., 1.), 0., 0.); }`;
 const FS_BG = `#version 300 es
-precision highp float; in vec2 vUv; uniform vec3 uBg; uniform int uImg; uniform sampler2D uTex; out vec4 o;
-void main(){ o = uImg == 1 ? vec4(texture(uTex, vec2(vUv.x, 1. - vUv.y)).rgb, 1.) : vec4(uBg, 1.); }`;
+precision highp float; in vec2 vUv; uniform vec3 uBg; uniform int uImg; uniform sampler2D uTex; uniform vec4 uView; out vec4 o;
+void main(){
+  vec2 uv = uView.xy + vUv * uView.zw;       // uView: the part of the board on the canvas (all of it, but in close-up)
+  if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) { o = vec4(0.); return; }
+  o = uImg == 1 ? vec4(texture(uTex, vec2(uv.x, 1. - uv.y)).rgb, 1.) : vec4(uBg, 1.);
+}`;
 
 /* The material shader. The field texture holds R = summed gaussian density, G = density-weighted radius.
    Surface = where R > 1. From R we recover the distance to the silhouette, then build the height as a
@@ -103,6 +107,7 @@ uniform vec3 uCam; uniform int uPass; uniform mat3 uRot; uniform float uSide, uD
 #define TX vec2
 #define OW(v) (v)
 #define SPECK .2
+uniform vec4 uView;   // the part of the board on the canvas: (0,0,1,1) but in close-up
 #endif
 ${GL_H}
 uniform vec2 uRes;
@@ -322,7 +327,13 @@ vec3 lumpGrad(vec2 p, float l0){ return vec3(l0 - lump(p + vec2(.3, 0.)), l0 - l
 
 void main(){
   lnA = log(uA);
+#ifdef MESH
   vec2 uv = vUv;
+#else
+  vec2 uv = uView.xy + vUv * uView.zw;
+  // off the board (close-up covers the window) nothing is drawn; masked rather than returned, so fwidth stays defined
+  float inDoc = step(0., uv.x) * step(uv.x, 1.) * step(0., uv.y) * step(uv.y, 1.);
+#endif
   vec2 c = F(uv);
   float R = c.x;
   float fw = max(fwidth(R), 1e-4);
@@ -355,6 +366,9 @@ void main(){
   if (uBrush == 2 && R > .6) rel = stoneRelief(doc, cav, bite);
 #endif
   float a = clamp((R - bite - 1.) / (fw * 1.5) + .5, 0., 1.);
+#ifndef MESH
+  a *= inDoc; shA *= inDoc;
+#endif
   ${mesh ? 'if (uPass == 0) { if (a < .5) discard; o = vec4(0.); return; }' : ''}
   if (a <= 0. && shA < .002) { o = vec4(0.); return; }
 
