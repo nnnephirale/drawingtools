@@ -1,0 +1,50 @@
+/* sessions */
+.sname{flex:1;min-width:0}
+.sess{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.scard{
+  position:relative;border:1px solid var(--line);background:var(--card);border-radius:13px;padding:6px;cursor:pointer;
+  color:var(--ink-2);min-width:0;
+  transition:transform .35s var(--ease),box-shadow .35s var(--ease),color .3s var(--ease),background .3s var(--ease);
+}
+.scard:hover{color:var(--ink);transform:translateY(-2px);box-shadow:0 8px 18px -10px rgba(0,0,0,.18)}
+.scard:active{transform:scale(.98)}
+.scard[aria-current="true"]{background:var(--fillbg);border-color:transparent;color:var(--ink)}
+/* the image is pinned inside its 4:3 box: Safari doesn't resolve a % height inside aspect-ratio, so a tall
+   drawing's thumbnail would otherwise grow the card down the whole panel */
+.sthumb{position:relative;aspect-ratio:4/3;min-height:0;border-radius:9px;background:var(--fillbg);overflow:hidden}
+.sthumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;animation:fadein .45s var(--ease)}
+@keyframes fadein{from{opacity:0}}
+.smeta{display:flex;flex-direction:column;gap:4px;padding:7px 3px 2px;min-width:0}
+.smeta .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;letter-spacing:.02em}
+.smeta small{color:var(--ink-3);font-size:10px}
+.sdel{
+  position:absolute;top:10px;right:10px;width:24px;height:24px;border:0;border-radius:8px;padding:0;cursor:pointer;
+  background:rgba(255,255,255,.88);color:var(--ink-2);display:grid;place-items:center;opacity:0;
+  transition:opacity .25s var(--ease),color .25s var(--ease);
+}
+.sdel svg.i{width:13px;height:13px}
+.scard:hover .sdel{opacity:1}
+.sdel:hover{color:var(--ink)}
+@media (hover:none){.scard[aria-current="true"] .sdel{opacity:1}.scard:hover{transform:none}}
+.btnrow{display:flex;gap:6px}
+.btnrow .btn{flex:1}
+
+.veil{
+  position:fixed;inset:0;z-index:20;display:none;place-items:center;
+  background:rgba(250,250,248,.82);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  color:var(--ink-2);letter-spacing:.1em;text-transform:uppercase;font-size:11px;
+}
+.veil.on{display:grid}
+.toast{
+  position:fixed;left:50%;bottom:calc(92px + var(--safe-b));transform:translateX(-50%) translateY(8px);
+  background:var(--toast);color:var(--white);border-radius:999px;padding:9px 16px;
+  font-size:11px;letter-spacing:.06em;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  opacity:0;pointer-events:none;transition:opacity .35s var(--ease),transform .45s var(--ease);
+  z-index:30;white-space:nowrap;display:flex;align-items:center;gap:12px;
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.toast button{appearance:none;border:0;background:rgba(255,255,255,.14);color:var(--white);border-radius:999px;height:24px;padding:0 10px;font:400 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.toast button:hover{background:rgba(255,255,255,.24)}
+.fatal{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;color:var(--ink-2);line-height:1.8}
+@media (hover:none){.iconbtn:hover,.btn:hover,.mat:hover{transform:none}}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}

@@ -91,3 +91,10 @@ After two of Illustrator's 3D and Materials Substance stones, *Comet Pit Surface
 - **Layers:** swipe a row either way past 56 px to duplicate it ("Duplicate" slides in behind the row); there's also a copy button next to the eye. The copy sits above its twin and comes up selected with the lasso, so the next drag moves only the copy.
 - **Colour fields:** a typed hex applies as soon as it's complete, not when the field loses focus, and a native picker closed without a `change` event no longer leaves its edit open. The first tap after using the native picker can still be swallowed by the browser (Chromium's popup, iPad's popover).
 
+## Round 10: the code in pieces
+Nothing changed in how the tool looks or works. `index.html` had grown to 3,200 lines, so its code now
+lives in `src/`: the markup in `src/page.html`, the styles in seven files, and the app in eighteen, cut at
+the section banners it already had. `node dev/build.mjs` joins them back into the same single
+`index.html`, which still opens by double-click. The first build reproduced the old file byte for byte;
+the only change since is line 2, which says the file is built. `ARCHITECTURE.md` says which file owns
+what, and `node dev/build.mjs --check` fails if that map or `index.html` falls out of date.

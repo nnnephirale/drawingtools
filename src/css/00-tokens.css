@@ -1,0 +1,29 @@
+/* Layout: one artboard centred in a stage, quiet frosted chrome floating around it (creative-tool-ui kit). */
+:root{
+  --page-a:#fcfcfb; --page-b:#f2f1ee;
+  --ink:#1c1b19; --ink-2:#6b6862; --ink-3:#a3a09a;
+  --panel:rgba(252,251,249,0.93);
+  --line:rgba(0,0,0,0.055); --line-2:rgba(0,0,0,0.10);
+  --fillbg:#f1efeb; --fillfg:#e2dfd8; --card:#ffffff;
+  --white:#ffffff;
+  --danger:#c0787c;
+  --toast:rgba(28,27,25,.92);
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --r:20px; --rail:306px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+body{
+  background:linear-gradient(180deg,var(--page-a),var(--page-b));color:var(--ink);
+  font-family:var(--mono);font-weight:300;font-size:12px;-webkit-font-smoothing:antialiased;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+}
+button{font-family:inherit;touch-action:manipulation}
+

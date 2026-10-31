@@ -1,0 +1,84 @@
+/* segmented control with a gliding thumb */
+.seg{position:relative;display:flex;background:var(--fillbg);border-radius:11px;padding:3px;height:36px;flex:none}
+.seg .thumb{
+  position:absolute;top:3px;bottom:3px;left:0;width:0;border-radius:8px;background:var(--white);
+  box-shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px -2px rgba(0,0,0,.08);
+  transition:transform .45s var(--ease),width .45s var(--ease);
+}
+.seg button{
+  flex:1;position:relative;border:0;background:transparent;cursor:pointer;border-radius:8px;
+  font:300 11px/1 var(--mono);letter-spacing:.04em;color:var(--ink-3);padding:0 4px;
+  display:flex;align-items:center;justify-content:center;gap:6px;transition:color .3s var(--ease);
+}
+.seg button:hover{color:var(--ink-2)}
+.seg button[aria-pressed="true"]{color:var(--ink)}
+.seg svg.i{width:15px;height:15px}
+
+/* material chips */
+.mats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.mat{
+  appearance:none;height:64px;border:1px solid var(--line);background:var(--card);border-radius:13px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 4px;cursor:pointer;color:var(--ink-2);
+  font:300 11px/1 var(--mono);letter-spacing:.02em;min-width:0;
+  transition:transform .35s var(--ease),color .3s var(--ease),border-color .3s var(--ease),background .3s var(--ease),box-shadow .35s var(--ease);
+}
+.mat span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mat:hover{color:var(--ink);transform:translateY(-2px);box-shadow:0 8px 18px -10px rgba(0,0,0,.18)}
+.mat:active{transform:scale(.97)}
+.mat[aria-pressed="true"]{background:var(--fillbg);border-color:transparent;color:var(--ink)}
+.mat .ball{width:22px;height:22px;transition:transform .45s var(--ease)}
+.mat:hover .ball{transform:scale(1.08)}
+
+/* background swatches */
+.bgs{display:flex;gap:8px;padding:2px 11px 4px;flex-wrap:wrap}
+.bgs button{
+  appearance:none;width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);cursor:pointer;padding:0;
+  transition:transform .3s var(--ease),box-shadow .3s var(--ease);
+}
+.bgs button:hover{transform:translateY(-1px)}
+.bgs button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--white),0 0 0 3px var(--ink-3)}
+.bgs .clr{background-image:linear-gradient(45deg,var(--fillfg) 25%,transparent 25%,transparent 75%,var(--fillfg) 75%),linear-gradient(45deg,var(--fillfg) 25%,transparent 25%,transparent 75%,var(--fillfg) 75%);background-size:8px 8px;background-position:0 0,4px 4px;background-color:var(--white)}
+
+/* layers */
+.layers{display:flex;flex-direction:column;gap:2px}
+.lrow{
+  position:relative;display:flex;align-items:center;gap:10px;padding:0 4px 0 11px;height:38px;border-radius:11px;cursor:pointer;
+  color:var(--ink-2);touch-action:pan-y;transition:background .3s var(--ease),color .3s var(--ease),transform .4s var(--ease);
+}
+/* swipe a row either way to duplicate it: the row follows the finger and the word slides in behind it */
+.lrow.swiping{transition:background .3s var(--ease),color .3s var(--ease)}
+.lrow::before,.lrow::after{
+  content:"Duplicate";position:absolute;top:0;bottom:0;display:flex;align-items:center;pointer-events:none;
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);opacity:0;transition:opacity .2s var(--ease),color .2s var(--ease);
+}
+.lrow::before{right:100%;padding-right:14px}
+.lrow::after{left:100%;padding-left:14px}
+.lrow.sw-r::before,.lrow.sw-l::after{opacity:.6}
+.lrow.armed::before,.lrow.armed::after{color:var(--ink)}
+.lrow:hover{color:var(--ink)}
+.lrow[aria-current="true"]{background:var(--fillbg);color:var(--ink)}
+.lrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lname{flex:1;min-width:0;border:0;border-bottom:1px solid var(--ink-3);background:transparent;border-radius:0;font:300 12px/1 var(--mono);color:var(--ink);padding:3px 0;outline:none;-webkit-user-select:text;user-select:text}
+.lrow small{color:var(--ink-3);font-size:10px;white-space:nowrap}
+.lrow.hid .ball{opacity:.3}
+.lrow.hid .nm{color:var(--ink-3)}
+.acts{display:flex;opacity:0;transition:opacity .25s var(--ease)}
+.lrow:hover .acts,.lrow[aria-current="true"] .acts{opacity:1}
+@media (hover:none){.acts{opacity:1}}
+.acts button{appearance:none;width:26px;height:26px;border:0;background:transparent;border-radius:8px;color:var(--ink-3);display:grid;place-items:center;cursor:pointer;padding:0;transition:color .25s var(--ease),background .25s var(--ease)}
+.acts button:hover{color:var(--ink);background:rgba(0,0,0,.04)}
+.acts svg.i{width:14px;height:14px}
+
+.btn{
+  appearance:none;border:1px solid var(--line-2);background:var(--card);border-radius:11px;
+  height:34px;padding:0 12px;cursor:pointer;color:var(--ink-2);
+  font:300 11px/1 var(--mono);letter-spacing:.06em;
+  transition:transform .3s var(--ease),color .3s var(--ease),border-color .3s var(--ease),background .3s var(--ease);
+}
+.btn:hover{color:var(--ink);border-color:var(--ink-3)}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--fillfg);border-color:transparent;color:var(--ink)}
+.btn.primary:hover{background:#d8d4cc}
+.btn.quiet{border-color:rgba(192,120,124,.32);color:var(--danger)}
+.btn.quiet:hover{border-color:var(--danger)}
+

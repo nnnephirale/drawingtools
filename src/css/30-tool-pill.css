@@ -1,0 +1,64 @@
+/* ── tool pill ─────────────────────────────────── */
+.pill{
+  position:absolute;left:50%;bottom:calc(26px + var(--safe-b));transform:translateX(-50%);
+  height:52px;border-radius:26px;padding:0 6px;
+  border:1px solid var(--line);background:var(--panel);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  display:flex;align-items:center;gap:2px;color:var(--ink-2);white-space:nowrap;
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 30px -12px rgba(0,0,0,.20);
+  transition:left .55s var(--ease),transform .4s var(--ease),opacity .4s var(--ease),box-shadow .4s var(--ease);
+}
+.pill:hover{box-shadow:0 2px 6px rgba(0,0,0,.04),0 18px 40px -14px rgba(0,0,0,.26)}
+@media (min-width:780px){ body:has(.panel:not([hidden-state])) .pill{left:calc((100% - var(--rail) - 28px) / 2)} }
+.tools{position:relative;display:flex;gap:2px}
+.tools .thumb{
+  position:absolute;left:0;top:0;height:40px;width:0;border-radius:20px;background:var(--fillbg);
+  transition:transform .45s var(--ease),width .45s var(--ease);
+}
+.tools button,.pi{
+  appearance:none;border:0;background:transparent;cursor:pointer;color:inherit;position:relative;
+  height:40px;border-radius:20px;display:flex;align-items:center;gap:8px;
+  font:300 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  transition:color .3s var(--ease),background .3s var(--ease),transform .3s var(--ease),opacity .3s var(--ease);
+}
+.tools button{padding:0 14px 0 11px}
+.tools button:hover,.tools button[aria-pressed="true"]{color:var(--ink)}
+.tools button:active,.pi:active{transform:scale(.96)}
+.pi{width:40px;justify-content:center;padding:0}
+.pi:hover{color:var(--ink);background:var(--fillbg)}
+.pi:disabled{opacity:.35;pointer-events:none}
+.pi svg.i{width:16px;height:16px}
+.psep{width:1px;height:18px;background:var(--line-2);margin:0 4px}
+/* tool chips rise just above their tool while it's on (left is set to the button's centre):
+   Canvas over 3D, the lasso's scope and delete over Lasso */
+.tchip{
+  position:absolute;bottom:calc(100% + 10px);left:0;transform:translate(-50%,6px) scale(.96);opacity:0;pointer-events:none;
+  appearance:none;height:34px;border-radius:17px;padding:0 13px 0 11px;display:flex;align-items:center;gap:8px;
+  border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 30px -12px rgba(0,0,0,.20);
+  color:var(--ink-2);cursor:pointer;font:300 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;
+  transition:transform .4s var(--ease),opacity .3s var(--ease),color .3s var(--ease);
+}
+.tchip.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+button.tchip:hover{color:var(--ink)}
+button.tchip.on:active{transform:translate(-50%,0) scale(.96)}
+.lchip{padding:0 3px;gap:2px;cursor:default}
+.lchip button{appearance:none;border:0;background:transparent;color:var(--ink-3);height:26px;border-radius:13px;padding:0 10px;cursor:pointer;
+  font:inherit;letter-spacing:inherit;text-transform:inherit;display:grid;place-items:center;
+  transition:color .3s var(--ease),background .3s var(--ease),width .3s var(--ease),opacity .3s var(--ease),transform .3s var(--ease)}
+.lchip button:hover,.lchip button[aria-pressed="true"]{color:var(--ink)}
+.lchip button[aria-pressed="true"]{background:var(--fillbg)}
+.lchip button:active{transform:scale(.96)}
+.lchip .ldel{width:0;padding:0;opacity:0;overflow:hidden;pointer-events:none}
+.lchip .ldel.on{width:30px;opacity:1;pointer-events:auto}
+.lchip .ldel svg.i{width:14px;height:14px}
+.c3d i{position:relative;width:12px;height:12px;border-radius:4px;border:1px solid var(--line-2);background:var(--white);flex:none;
+  transition:background .25s var(--ease),border-color .25s var(--ease)}
+.c3d[aria-pressed="true"] i{background:var(--ink-2);border-color:var(--ink-2)}
+.c3d[aria-pressed="true"] i::after{
+  content:"";position:absolute;left:3.5px;top:1px;width:3px;height:6px;
+  border:solid var(--white);border-width:0 1.3px 1.3px 0;transform:rotate(42deg);
+}
+.ball{width:16px;height:16px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.12)}
+.tools svg.i{width:16px;height:16px}
+

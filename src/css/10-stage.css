@@ -1,0 +1,50 @@
+/* ── stage + artboard ─────────────────────────────── */
+.stage{
+  position:fixed;top:calc(64px + var(--safe-t));left:calc(24px + var(--safe-l));right:calc(24px + var(--safe-r));bottom:calc(96px + var(--safe-b));
+  display:grid;place-items:center;transition:right .55s var(--ease),bottom .55s var(--ease);touch-action:none;
+}
+.board{
+  position:relative;border-radius:4px;transform-origin:50% 50%;will-change:transform;touch-action:none;
+  box-shadow:0 1px 2px rgba(0,0,0,.04),0 30px 70px -24px rgba(0,0,0,.28);
+  background-color:var(--white);
+}
+.board.clear{
+  background-image:linear-gradient(45deg,var(--fillbg) 25%,transparent 25%,transparent 75%,var(--fillbg) 75%),
+                   linear-gradient(45deg,var(--fillbg) 25%,transparent 25%,transparent 75%,var(--fillbg) 75%);
+  background-size:16px 16px;background-position:0 0,8px 8px;
+}
+.board.easing{transition:transform .45s var(--ease)}
+.board canvas{display:block;width:100%;height:100%;border-radius:inherit;touch-action:none}
+/* 3D: the board becomes a window-sized view onto the relief (the camera keeps it where the 2D board was) */
+.board.three{
+  position:fixed;inset:0;width:auto!important;height:auto!important;transform:none!important;
+  border-radius:0;box-shadow:none;background:none!important;cursor:grab;
+}
+.board.three.grabbing{cursor:grabbing}
+.board.three canvas{filter:drop-shadow(0 22px 30px rgba(0,0,0,.13))}
+.board.three .guides,.board.three .empty{display:none}
+.board.nocursor{cursor:none}
+.board.lasso{cursor:default}
+.board.lasso.selmove{cursor:move}
+/* the lasso: marching ants over a white halo, so it reads on any background */
+.selg path{fill:none;vector-effect:non-scaling-stroke}
+.selg .halo{stroke:rgba(255,255,255,.9);stroke-width:2.5}
+.selg .ants{stroke:rgba(20,19,16,.8);stroke-width:1;stroke-dasharray:4 4;animation:ants .9s linear infinite}
+.selg .tint{fill:rgba(20,19,16,.04);stroke:none}
+@keyframes ants{to{stroke-dashoffset:-8}}
+.board.grab{cursor:grab}
+.guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.guides line{stroke:rgba(0,0,0,.16);stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:2 6}
+.empty{
+  position:absolute;left:0;right:0;bottom:22px;text-align:center;color:var(--ink-3);pointer-events:none;
+  font-size:11px;letter-spacing:.06em;transition:opacity .6s var(--ease);
+}
+.empty.off{opacity:0}
+.ring{
+  position:fixed;left:0;top:0;border-radius:50%;pointer-events:none;z-index:4;opacity:0;
+  border:1px solid rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(255,255,255,.55),inset 0 0 0 1px rgba(255,255,255,.35);
+  transition:opacity .2s var(--ease);
+}
+.ring.on{opacity:1}
+.ring.erase{border-style:dashed}
+
