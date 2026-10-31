@@ -40,7 +40,7 @@ page order; a new file takes a free number between its neighbours and gets its o
 | `src/js/40-frame-loop.js` | `request()` and the frame loop, the status readout. |
 | `src/js/45-view.js` | 2D view: fit, zoom and pan, the zoom bar, board rotation, resolution, the close-up. |
 | `src/js/50-history.js` | Undo and redo, sessions in IndexedDB (save, open, rename, delete, thumbnails), session files, prefs. |
-| `src/js/55-input.js` | Pen, mouse, finger and Force Touch: strokes, taps, two-finger gestures, lasso selection and moving it. |
+| `src/js/55-input.js` | Pen, mouse, finger and Force Touch: strokes, hold to snap (line, arc, circle), taps, two-finger gestures, lasso selection and moving it. |
 | `src/js/60-ui.js` | The panel and its tabs, the tool pill, toast, sliders and segments, materials, backgrounds, layers, sessions list. |
 | `src/js/65-images-in.js` | Dropping or picking an image to draw on (`loadImageFile`). |
 | `src/js/70-export-png.js` | `renderCanvas` at any scale, `deliverFile`, `exportPNG`, `export3DPNG`. |

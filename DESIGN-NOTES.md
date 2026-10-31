@@ -98,3 +98,10 @@ the section banners it already had. `node dev/build.mjs` joins them back into th
 `index.html`, which still opens by double-click. The first build reproduced the old file byte for byte;
 the only change since is line 2, which says the file is built. `ARCHITECTURE.md` says which file owns
 what, and `node dev/build.mjs --check` fails if that map or `index.html` falls out of date.
+
+## Round 11: hold to snap
+- **Hold the pen still** for half a second (within 6 screen px) and the stroke so far becomes a shape, like Procreate's QuickShape: nearly straight → a **line**, an even bend → an **arc**, a loop that came round on itself → a **circle**. Anything else (a V, a squiggle, an ellipse) is left alone and pools as before. A small toast names the shape, and the hand-drawn stroke slides into it over 180 ms.
+- **Adjust before lifting.** A line's end follows the pen and settles onto 45° steps of the screen when within 3° (of the screen, so it still works on a turned board). An arc keeps its bend while its end moves. A circle grows and turns about its centre.
+- **It keeps the hand's weight.** Each sample keeps its pressure, time and tilt, placed by how far along the stroke it came, so a line that was pressed harder at one end still swells there. The samples taken during the hold are dropped, so the end doesn't pool. Snapped strokes skip smoothing (it would cut inside an arc), and a circle drops its last stamp where it would sit on its first, so there's no heavy spot at the seam.
+- **Off switch:** Brush tab → Shapes → *Hold to snap*, for when you want a still pen to pool on a straight-ish stroke.
+

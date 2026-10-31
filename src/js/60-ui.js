@@ -248,7 +248,10 @@ function renderPanel() {
     bp.append(sec('Mirror'),
       seg(Object.keys(SYM_ICONS).map(k => [k, SYM_ICONS[k], { off: 'No mirror', x: 'Left / right', y: 'Top / bottom', xy: 'Four quarters', r6: 'Six-way radial' }[k]]),
         () => ui.sym, v => { ui.sym = v; updateGuides(); save(); }),
-      hint('Pressure comes from Apple Pencil and drawing tablets, and from a Force Touch trackpad in Safari. A mouse has no pressure sensor, so speed and pauses do the work: slow down to swell, hold still to pool.'));
+      hint('Pressure comes from Apple Pencil and drawing tablets, and from a Force Touch trackpad in Safari. A mouse has no pressure sensor, so speed and pauses do the work: slow down to swell, hold still to pool.'),
+      sec('Shapes'),
+      toggleRow('Hold to snap', () => ui.snap, v => ui.snap = v),
+      hint('Hold the pen still at the end of a stroke and a nearly straight one becomes a line, an even curve an arc, a closed loop a circle. Keep holding and move to adjust it. Strokes that are neither still pool.'));
 
   }
   // Surface

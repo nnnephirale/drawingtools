@@ -106,7 +106,7 @@ function savePrefs() {
   if (isLab || !prefsReady) return;
   try {
     localStorage.setItem(KEY, JSON.stringify({ v: 2, cur: session ? session.id : null, last: lastParams,
-      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, canvas3d: ui.canvas3d, selAll: ui.selAll, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
+      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, canvas3d: ui.canvas3d, selAll: ui.selAll, snap: ui.snap, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
   } catch (e) {}
 }
 function save() {

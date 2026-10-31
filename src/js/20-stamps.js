@@ -36,7 +36,7 @@ function strokeStamps(st, P, out, W, H, minSig) {
   const A = erase ? ERASE_A : mergeA(P.merge);
   const base = (erase ? st.size : P.size) * .5;
   const prI = erase ? .5 : P.pressure, spI = erase ? 0 : P.speed, tiI = erase ? 0 : P.tilt;
-  const smoothK = erase ? .15 : P.smooth, poolK = erase ? 0 : P.pool, vary = erase ? 0 : P.vary;
+  const smoothK = st.shape ? 0 : erase ? .15 : P.smooth, poolK = erase ? 0 : P.pool, vary = erase ? 0 : P.vary;
   const end = erase ? 'none' : P.end;
   const vref = 1.1 * W / 1600;
   const emit = emitter(out, st.sym, W, H);
@@ -106,6 +106,7 @@ function strokeStamps(st, P, out, W, H, minSig) {
   }
   const seed = st.seed || 0;
   const ns1 = 1 / (base * 3 + 10), ns2 = 1 / (base * 1.1 + 4);
+  const closed = st.shape === 'circle';
   const wl = end === 'wedge' ? Math.min(P.taper * base * 3.2, L * .5) : 0;
   let next = 0, seg = 1;
   while (next <= L) {
@@ -118,10 +119,11 @@ function strokeStamps(st, P, out, W, H, minSig) {
     r = Math.max(.05, r);
     const sg = Math.max(r * sigK, minSig);
     const sp = Math.max(.3, .7 * sg);
+    if (closed && next > 0 && next + sp * .5 > L) break;     // a circle's last stamp would sit on its first
     emit(x, y, sg, A * sp / (SQ2PI * sg), r);
     next += sp;
   }
-  if (end === 'drop') {
+  if (end === 'drop' && !closed) {
     dot(DX[0], DY[0], DR[0] * 1.04, .55);
     dot(DX[k - 1], DY[k - 1], DR[k - 1] * 1.06, .6);
   }
