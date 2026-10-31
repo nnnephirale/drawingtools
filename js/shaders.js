@@ -41,12 +41,137 @@ void main(){ o = texture(uSrc, vUv); }`;
 const FS_ERASE = `#version 300 es
 precision highp float; in vec2 vUv; uniform sampler2D uSrc, uE; uniform float uInv; out vec4 o;
 void main(){ vec4 f = texture(uSrc, vUv); float e = texture(uE, vUv).r * uInv; o = vec4(f.rg * clamp(1. - e, 0., 1.), 0., 0.); }`;
+/* Scene light. Everything on the board shares one key light and one sky. Three small buffers (half the field's
+   resolution, in the board's uv) carry what a single layer can't know on its own:
+   - heights: every visible layer's height summed (doc px), mipmapped, so blurred heights are one fetch away;
+   - colours: the backdrop with each layer's colour laid over it, mipmapped: what a surface sees around it,
+     for bounce light (red clay warms the paper beside it, green paper tints the clay's lower walls);
+   - light: per texel, how much of the key light gets through (cast shadow) and how open the sky is (occlusion).
+   The ground and every layer read them back in one or two fetches. */
+const PAPER_GLSL = `
+float phash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float pnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(phash(i), phash(i+vec2(1,0)), f.x), mix(phash(i+vec2(0,1)), phash(i+vec2(1,1)), f.x), f.y); }
+float pfbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 4; i++){ s += a * pnoise(p); p = p * 2.03 + 17.1; a *= .5; } return s; }
+// paper at doc px p: xy = slope of the sheet (for its normal), z = tone (multiplies the colour)
+vec3 paper(vec2 p, vec2 docSz, int kind, float seed){
+  if (kind == 0) return vec3(0., 0., 1.);
+  vec2 s = vec2(seed * 7.1, seed * 3.3);
+  float e = .7;
+  // formation: the cloudy unevenness of pulp, and short fibres at ~1 px
+  float form = pfbm(p / 11. + s) - .5;
+  float fib = pnoise(vec2(p.x * .9 + p.y * .4, p.y * .9 - p.x * .4) / 1.3 + s) - .5;
+  float tone = 1. + form * .07 + fib * .035 + (phash(floor(p * 1.1) + s) - .5) * .025;
+  // tooth: the grain the light rakes across
+  vec2 g = vec2(pnoise((p + vec2(e, 0.)) / 2. + s) - pnoise((p - vec2(e, 0.)) / 2. + s),
+                pnoise((p + vec2(0., e)) / 2. + s) - pnoise((p - vec2(0., e)) / 2. + s)) * .065;
+  // cockle: a sheet is never quite flat
+  float c0 = pfbm(p / 260. + s * .1);
+  g += vec2(pfbm((p + vec2(9., 0.)) / 260. + s * .1) - c0, pfbm((p + vec2(0., 9.)) / 260. + s * .1) - c0) * .55;
+  if (kind == 2) {
+    // folded in four and opened out: a valley down the middle, a ridge across it, every panel tilted a little
+    vec2 c = docSz * .5 + vec2(pnoise(vec2(p.y / 90., seed)) - .5, pnoise(vec2(p.x / 90., seed + 4.)) - .5) * 5.;
+    vec2 d = p - c;
+    g.x += -.045 * tanh(d.x / 2.2) * (1. - .25 * smoothstep(0., docSz.y * .5, abs(d.y)));
+    g.y += .03 * tanh(d.y / 2.2) * (1. - .25 * smoothstep(0., docSz.x * .5, abs(d.x)));
+    float crush = exp(-d.x * d.x / 3.) + .8 * exp(-d.y * d.y / 3.);
+    tone *= 1. - .06 * crush * (.6 + .8 * pnoise(p / 3. + s));
+  }
+  return vec3(g, tone);
+}`;
+/* Reading the scene light (see FS_LIGHT), shared by the ground, the layers and the light buffer itself.
+   Occlusion is computed right where it's needed from the blurred heights: trilinear mips are smooth, so it
+   never traces the half-res grid. The cast shadow comes from the light buffer, which holds two values per
+   texel: the light on top of whatever stands there (r, at height b) and the light at paper level, ignoring
+   what stands on that very spot (g). Every point reads r from the texels whose height matches its own: read
+   plainly, a stroke's rim would take the paper's shadow and the paper beside it the stroke's (a dark outline,
+   jagged on the half-res grid). Where none matches, it takes g. */
+const SCENE_GLSL = `
+uniform sampler2D uSH;
+uniform float uTexDoc;        // doc px per scene texel
+uniform vec3 uSL;             // towards the key light, doc frame (y down)
+uniform float uSoft;          // tan of the light's angular radius
+uniform float uReach;         // the longest a shadow can fall (doc px)
+uniform int uSteps;           // 0: no cast shadow
+uniform vec2 uLBTexel;
+float shash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+// how open the sky is at height z: how far the blurred heights around rise above it, from contact to broad
+float sceneAO(vec2 uv, float z){
+  float occ = 0., ws = 0.;
+  // from the second level up, each ramping over twice its own width: finer, or saturating within a texel,
+  // the contact band follows the half-res texel staircase along every diagonal outline
+  for (int l = 2; l <= 7; l++) {
+    float fl = float(l), r = uTexDoc * exp2(fl) * 1.6, w = 1.8 / (fl - .5);
+    occ += w * smoothstep(0., 1., (textureLod(uSH, uv, fl).r - z) / r); ws += w;
+  }
+  // eased, never clipped: a clipped floor reads as a flat dark band hugging every outline
+  return 1. - .62 * (1. - exp(-2.4 * occ / ws));
+}
+// the key light reaching height z at uv: march towards the light over the summed heights. The ray's closest
+// pass over anything in the way, over how far along it is, is the penumbra: wide far from the occluder, sharp
+// where it touches. Further out it reads blurrier heights, as a cone from a light of real size would.
+float sceneVis(vec2 uv, float z, int steps, float j, vec2 docSz, float t0){
+  if (steps <= 0) return 1.;
+  vec2 duv = normalize(vec2(uSL.x, -uSL.y) + 1e-6) / docSz;
+  float tanE = uSL.z / max(length(uSL.xy), 1e-4), n = float(steps), vis = 1.;
+  for (int i = 0; i < 64; i++) {
+    if (i >= steps) break;
+    float f = (float(i) + j) / n;
+    float t = uTexDoc * t0 + uReach * f * f;
+    vec2 q = uv + duv * t;
+    if (q.x < 0. || q.y < 0. || q.x > 1. || q.y > 1.) break;
+    float lod = clamp(log2(max(t * uSoft * .6 / uTexDoc, 1.)), 0., 4.);
+    vis = min(vis, (z + t * tanE - textureLod(uSH, q, lod).r + uTexDoc * .35) / (t * uSoft));
+    if (vis <= 0.) break;
+  }
+  vis = clamp(vis, 0., 1.);
+  return vis * vis * (3. - 2. * vis);
+}
+float keyVis(sampler2D lb, vec2 uv, float z){
+  if (uSteps <= 0) return 1.;
+  vec2 p = uv / uLBTexel - .5, f = fract(p), b = (floor(p) + .5) * uLBTexel;
+  vec4 s00 = texture(lb, b), s10 = texture(lb, b + vec2(uLBTexel.x, 0.)), s01 = texture(lb, b + vec2(0., uLBTexel.y)), s11 = texture(lb, b + uLBTexel);
+  vec4 w = vec4((1. - f.x) * (1. - f.y), f.x * (1. - f.y), (1. - f.x) * f.y, f.x * f.y)
+         * exp(-abs(vec4(s00.b, s10.b, s01.b, s11.b) - z) / (2. + z * .15));
+  float ws = w.x + w.y + w.z + w.w;
+  if (ws < .01) return texture(lb, uv).g;     // none at this height (paper tucked under an outline): paper level
+  return dot(vec4(s00.r, s10.r, s01.r, s11.r), w) / ws;
+}`;
 const FS_BG = `#version 300 es
-precision highp float; in vec2 vUv; uniform vec3 uBg; uniform int uImg; uniform sampler2D uTex; uniform vec4 uView; out vec4 o;
+precision highp float; in vec2 vUv;
+uniform vec3 uBg; uniform int uImg; uniform sampler2D uTex; uniform vec4 uView; uniform vec2 uDoc;
+uniform int uPaper; uniform float uSeed;
+uniform int uLit;                       // 1: the scene buffers are there to read
+uniform sampler2D uLB, uSA;
+uniform vec3 uKeyC, uSkyC, uOpenC;
+uniform float uBleedLod, uShade;
+uniform int uClear;                     // a transparent board: only the shade, as darkness
+out vec4 o;
+${PAPER_GLSL}
+${SCENE_GLSL}
 void main(){
   vec2 uv = uView.xy + vUv * uView.zw;       // uView: the part of the board on the canvas (all of it, but in close-up)
   if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) { o = vec4(0.); return; }
-  o = uImg == 1 ? vec4(texture(uTex, vec2(uv.x, 1. - uv.y)).rgb, 1.) : vec4(uBg, 1.);
+  vec3 c = uImg == 1 ? texture(uTex, vec2(uv.x, 1. - uv.y)).rgb : uBg;
+  if (uLit == 0 && uPaper == 0) { o = uClear == 1 ? vec4(0.) : vec4(c, 1.); return; }
+  vec2 doc = vec2(uv.x, 1. - uv.y) * uDoc;
+  vec3 pp = paper(doc, uDoc, uPaper, uSeed);
+  vec3 alb = pow(c, vec3(2.2)) * pp.z;
+  vec3 N = normalize(vec3(-pp.xy, 1.));
+  float vis = 1., ao = 1.;
+  vec3 bounce = vec3(0.);
+  if (uLit == 1) {
+    vis = keyVis(uLB, uv, 0.);
+    float a0 = sceneAO(uv, 0.);
+    ao = mix(1., a0, uShade);
+    // light thrown back by whatever stands close by, in its colour
+    bounce = textureLod(uSA, uv, uBleedLod).rgb * (1. - a0) * .45 * uShade * uOpenC;
+  }
+  vec3 E = uKeyC * max(dot(N, uSL), 0.) * vis + uSkyC * ao + bounce;
+  if (uClear == 1) { o = vec4(0., 0., 0., 1. - clamp(dot(E / uOpenC, vec3(.2126, .7152, .0722)), 0., 1.)); return; }
+  vec3 col = alb * E / uOpenC;
+  col = col / (1. + max(col - 1., 0.));
+  o = vec4(pow(max(col, 0.), vec3(1. / 2.2)), 1.);
 }`;
 
 /* The material shader. The field texture holds R = summed gaussian density, G = density-weighted radius.
@@ -91,6 +216,44 @@ float Hg(vec2 uv){
 }
 // the bevel, also closed off at the board's edge (for the 3D view's shading)
 float Hc(vec2 uv){ float te = edgeT(uv); return min(H(uv), uBevel * sqrt(1. - (1. - te) * (1. - te))); }`;
+
+/* One visible layer into the scene buffers: its surface (uMode 0), its colour where it covers (1), the backdrop
+   the colours start from (2), or what it will stand on (3). A layer stands on the layers below blurred over about
+   its own radius, so a snake laid across another drapes over it and down, instead of stepping off a cliff (and
+   shadowing itself where it does). Its surface is laid over the heights so far like paint: where it covers,
+   the top is its base plus its own height. */
+const FS_SCENE = `#version 300 es
+precision highp float; in vec2 vUv;
+${GL_H}
+uniform int uMode; uniform float uK, uLift, uLod; uniform vec3 uCol; uniform int uImg; uniform sampler2D uTex;
+uniform sampler2D uBase; uniform vec4 uBaseCh;
+out vec4 o;
+void main(){
+  if (uMode == 2) { vec3 c = uImg == 1 ? texture(uTex, vec2(vUv.x, 1. - vUv.y)).rgb : uCol; o = vec4(pow(c, vec3(2.2)), 1.); return; }
+  if (uMode == 3) { o = vec4(textureLod(uTex, vUv, uLod).r); return; }
+  lnA = log(uA);
+  // a rolled snake of clay is a whole cylinder lying on the board: what we see is its upper half, standing on a
+  // lower half that's tucked out of sight. uLift adds that hidden half (one radius) so it casts like one.
+  if (uMode == 0) { vec2 f = F(vUv); float on = step(1., f.x);         // a clean step: a texel is ground or stroke, never between
+    float top = (H(vUv) + uLift * f.y / max(f.x, 1e-4) * 64.) * uK + dot(texture(uBase, vUv), uBaseCh);
+    o = vec4(top * on, 0., 0., on); return; }
+  float a = clamp((F(vUv).x - 1.) * 3. + .5, 0., 1.);
+  o = vec4(uCol * a, a);
+}`;
+// the light buffer: per scene texel, the key light on top of whatever stands there (r), at paper level (g), that height (b)
+const FS_LIGHT = `#version 300 es
+precision highp float; in vec2 vUv;
+uniform vec2 uDoc;
+${SCENE_GLSL}
+out vec4 o;
+void main(){
+  float z0 = textureLod(uSH, vUv, 0.).r, j = shash(gl_FragCoord.xy);
+  // paper texels start a texel and a half out: on the half-res grid every outline is a staircase, and a paper
+  // texel tucked into one of its steps would otherwise shadow itself on the stroke right beside it (dots)
+  float top = sceneVis(vUv, z0, uSteps, j, uDoc, z0 > .5 ? .8 : 1.5);
+  // at paper level under a stroke, start the ray past the stroke's own edge: what reaches the paper just beside it
+  o = vec4(top, z0 > .5 ? sceneVis(vUv, 0., uSteps, j, uDoc, 4.) : top, z0, 1.);
+}`;
 // mesh = the 3D view: V comes from the real camera, and a depth pre-pass (uPass 0) lays down the solid part
 const fsComp = mesh => `#version 300 es
 precision highp float;
@@ -116,8 +279,13 @@ uniform vec3 uL;
 uniform int uBrush;
 uniform vec3 uC0, uC1, uC2;
 uniform float uGloss, uShine, uBreak, uSpeckle, uGrain, uRough, uContrast, uIri, uShadow, uShadowDist, uSeed, uSky, uRim;
-uniform float uPits, uFacets, uDScale, uRelief;
+uniform float uPits, uFacets, uDScale, uRelief, uGlow;
+// scene light (FS_LIGHT): uLit 0 = none, 1 = shadow and occlusion, 2 = occlusion only (the 3D view, where the
+// room's light turns with the camera and a shadow baked on the board would point the wrong way)
+uniform int uLit; uniform sampler2D uLB, uSA; uniform vec3 uKeyC, uSkyC, uOpenC, uBgC; uniform float uEnvLod, uShade;
+uniform sampler2D uBase; uniform vec4 uBaseCh;      // what this layer stands on: the layers below, summed (one channel)
 out vec4 o;
+${SCENE_GLSL}
 
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
@@ -387,6 +555,16 @@ void main(){
     float cl = Hc(uv - vec2(t.x, 0.)), cr = Hc(uv + vec2(t.x, 0.)), cu = Hc(uv + vec2(0., t.y)), cd = Hc(uv - vec2(0., t.y));
     N0 = OW(normalize(vec3(-(cr - cl) / tDoc * k3, -(cd - cu) / tDoc * k3, uSide)));
 #endif
+#ifndef MESH
+    // laid over other layers, it drapes (see FS_SCENE): tilt it by the slope of what it stands on, so it turns
+    // from the light as it climbs down rather than staying flat and meeting a hard shadow there
+    if (uLit > 0 && dot(uBaseCh, uBaseCh) > 0.) {
+      vec2 bt = uLBTexel;
+      float bl = dot(texture(uBase, uv - vec2(bt.x, 0.)), uBaseCh), br = dot(texture(uBase, uv + vec2(bt.x, 0.)), uBaseCh);
+      float bd = dot(texture(uBase, uv - vec2(0., bt.y)), uBaseCh), bu = dot(texture(uBase, uv + vec2(0., bt.y)), uBaseCh);
+      N0 = normalize(vec3(N0.xy / N0.z - vec2((br - bl) / (2. * bt.x * uDoc.x), -(bu - bd) / (2. * bt.y * uDoc.y)), 1.));
+    }
+#endif
     vec3 N = N0;
     vec3 L = uL, V = ${mesh ? 'OW(normalize(uCam - vP))' : 'vec3(0., 0., 1.)'};
     vec2 Lxy = normalize(L.xy + vec2(1e-5));
@@ -395,6 +573,17 @@ void main(){
     float wob = fbm(tx / 120. + uSeed) - .5;
     // fine photographic grain: two octaves of ~1 doc-px noise
     float gn = (hash(floor(tx * 1.4) + uSeed) - .5) * .9 + (vnoise(tx / 1.6 + uSeed * 3.1) - .5) * .7;
+    // scene light: how much of the key gets through, how open the sky is, and the colour of what's around
+    float sVis = 1., sAo = 1.;
+    vec3 envG = uBgC;
+    if (uLit > 0) {
+      // this point's height in the scene: its own (clay stands on its hidden lower half, see FS_SCENE, so its
+      // visible rim is the equator, a radius up) on top of the layers below it
+      float zs = (H(uv) + (uBrush == 3 ? rad : 0.)) * uVol + dot(texture(uBase, uv), uBaseCh);
+      if (uLit == 1) sVis = keyVis(uLB, uv, zs);
+      sAo = mix(1., sceneAO(uv, zs), uShade);
+      envG = textureLod(uSA, uv, uEnvLod).rgb;
+    }
 
     if (uBrush == 0) {
       // ── glazed ceramic / slip ──
@@ -444,6 +633,52 @@ void main(){
       float fres = .04 + .96 * pow(1. - clamp(N.z, 0., 1.), 5.);
       float spec = stoneEnv(Rr, L, uGloss) * fres * mix(.2, 14., uGloss * uGloss);
       col += spec * uShine * (1. - cav * .7);
+    } else if (uBrush == 3) {
+      // ── modelling clay ── lit like a photograph: a soft key, the sky, and bounce from what's around.
+      // Divided by what flat open ground receives, so a lit top shows the chosen colour as it is.
+      // hand-worked: broad lumps, smaller dents where a thumb pressed, the fine tooth of the clay itself
+      float inner = smoothstep(0., .3, e0);
+      TX lp = tx / 24. + uSeed * 5.;
+      N = normalize(N + tang(OW(lumpGrad(lp, lump(lp))), N) * (.05 + .28 * uGrain) * inner);
+      TX dp = tx / 11. + uSeed * 2.3;
+      N = normalize(N + tang(OW(lumpGrad(dp, lump(dp))), N) * .1 * uGrain * inner);
+      TX op = tx / 1.7 + uSeed;
+      N = normalize(N + tang(OW(jit(op, 13.3)), N) * .045 * uGrain);
+      float mott = fbm(tx / 46. + uSeed * 2.) - .5;
+      vec3 alb = uC0 * (1. + mott * .07 + gn * .025 * uGrain);
+      float ndl = dot(N, L), lam = max(ndl, 0.);
+      // soft clay lets light in: the terminator wraps further round, in the colour at full strength
+      float wk = .2 + .5 * uGlow, wrap = clamp((ndl + wk) / (1. + wk), 0., 1.);
+      vec3 deep = alb / max(max(alb.r, max(alb.g, alb.b)), .03);
+      vec3 key = uKeyC * lam * sVis;
+      vec3 sss = uKeyC * (wrap - lam) * mix(.4, 1., sVis) * uGlow * .55 * deep;
+      // the sky from above; from below, the ground the wall faces, as lit as that ground is: in front of the
+      // lit side it's bright paper, in front of the shadow side it's the shadow, so that side goes deep
+      float up = .5 + .5 * clamp(N.z, -1., 1.);
+      vec3 gRad = envG * uOpenC * .5;
+      if (uLit > 0) {
+#ifdef MESH
+        vec2 gq = uv;
+#else
+        vec2 gq = uv + vec2(N.x, -N.y) * rad * .9 / uDoc;
+#endif
+        vec3 ga = textureLod(uSA, gq, max(uEnvLod - 1., 0.)).rgb;
+        gRad = ga * (uKeyC * uL.z * (uLit == 1 ? texture(uLB, gq).g : 1.) + uSkyC * .75) * .5;   // cheap: paper-level light, typical occlusion
+      }
+      // the clay meets the board just below what we see; its lowest band sits in that crease
+      float crease = mix(.6, 1., smoothstep(0., .4, e0));
+      vec3 amb = uSkyC * up * sAo + gRad * (1. - up) * crease;
+      col = alb * (key + amb * crease) + alb * sss;
+      // satin: the soft key mirrored as a broad sheen along the lit crest, tightening as Sheen goes up
+      vec3 Hh = normalize(L + V);
+      float nh = max(dot(N, Hh), 0.);
+      float lobe = pow(nh, mix(6., 48., uGloss * uGloss)) * mix(.16, .42, uGloss);
+      col += uKeyC * lobe * smoothstep(0., .2, lam) * sVis * uShine;
+      // grazing walls mirror a little of what's around them
+      vec3 Rr = reflect(-V, N);
+      float fr = .04 + .96 * pow(1. - clamp(dot(N, V), 0., 1.), 5.);
+      col += fr * mix(gRad, uSkyC * sAo, smoothstep(-.2, .5, Rr.z)) * .45 * (.3 + uGloss);
+      col /= uOpenC;
     } else {
       // ── liquid metal ──
       TX np = tx / 6. + uSeed;
@@ -481,6 +716,8 @@ void main(){
       cm = mix(cm, cm * (.3 + 1.15 * iri), uIri);
       col = cm;
     }
+    // the other materials keep their own lighting; the scene only shades them where it's blocked
+    if (uLit > 0 && uBrush != 3) col *= mix(1. - .45 * uShade, 1., sVis) * mix(1., sAo, .7);
   }
   col = col / (1. + max(col - 1., 0.));
   vec3 srgb = pow(max(col, 0.), vec3(1. / 2.2));
@@ -532,5 +769,5 @@ void main(){
   o = vec4(c * s, 1.);
 }`;
 
-return { VS_FULL, VS_STAMP, FS_STAMP, FS_COPY, FS_ERASE, FS_BG, GL_H, fsComp, VS_MESH, FS_HGT, VS_SLAB, FS_SLAB };
+return { VS_FULL, VS_STAMP, FS_STAMP, FS_COPY, FS_ERASE, FS_BG, FS_SCENE, FS_LIGHT, GL_H, fsComp, VS_MESH, FS_HGT, VS_SLAB, FS_SLAB };
 })();

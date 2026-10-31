@@ -14,7 +14,7 @@ gl.getExtension('EXT_color_buffer_half_float');
 gl.getExtension('EXT_float_blend');
 
 // GLSL lives in js/shaders.js
-const { VS_FULL, VS_STAMP, FS_STAMP, FS_COPY, FS_ERASE, FS_BG, GL_H, fsComp, VS_MESH, FS_HGT, VS_SLAB, FS_SLAB } = window.SM_SHADERS;
+const { VS_FULL, VS_STAMP, FS_STAMP, FS_COPY, FS_ERASE, FS_BG, FS_SCENE, FS_LIGHT, GL_H, fsComp, VS_MESH, FS_HGT, VS_SLAB, FS_SLAB } = window.SM_SHADERS;
 
 function compile(type, src) {
   const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -39,6 +39,8 @@ const PR = {
   mesh: program(VS_MESH, fsComp(true)),
   hgt: program(VS_FULL, FS_HGT),
   slab: program(VS_SLAB, FS_SLAB),
+  scene: program(VS_FULL, FS_SCENE),
+  light: program(VS_FULL, FS_LIGHT),
 };
 
 // stamp geometry: one quad, instanced per stamp
@@ -79,7 +81,8 @@ function makeTarget(w, hgt, fmt) {
   freeTarget(t);
 }
 function freeTarget(t) { if (!t) return; gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
-function swapTarget(a, b) { [a.tex, b.tex] = [b.tex, a.tex]; [a.fb, b.fb] = [b.fb, a.fb]; }
+function swapTarget(a, b) { [a.tex, b.tex] = [b.tex, a.tex]; [a.fb, b.fb] = [b.fb, a.fb]; fieldGen++; }
+let fieldGen = 0;      // counts writes to any height field, so the scene light knows when to look again
 function clearTarget(t) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.viewport(0, 0, t.w, t.h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
 function bindTex(unit, tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); }
 function fullscreen(prog, target, setup) {

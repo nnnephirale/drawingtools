@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Built from src/ by dev/build.mjs (edit src/, then run: node dev/build.mjs) · sha256 667fb63c6e8a5f4c -->
+<!-- Built from src/ by dev/build.mjs (edit src/, then run: node dev/build.mjs) · sha256 e539985154d3d8f5 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -497,6 +497,7 @@ button.tchip.on:active{transform:translate(-50%,0) scale(.96)}
       <i class="thumb"></i>
       <button data-tool="slip" title="Slip (B)"><span class="ball" id="ballSlip"></span>Slip</button>
       <button data-tool="stone" title="Stone (B)"><span class="ball" id="ballStone"></span>Stone</button>
+      <button data-tool="clay" title="Clay (B)"><span class="ball" id="ballClay"></span>Clay</button>
       <button data-tool="erase" title="Eraser (E)">
         <svg class="i" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4-8.5 8.5H6l-1.5-1.5a1.5 1.5 0 010-2.1z"/><path d="M10 18h9"/></svg>Erase
       </button>
@@ -616,6 +617,16 @@ const STONE_PRESETS = [
   { name: 'Basalt',    color: '#3C3B3A', pits: .26, facets: .65, grit: .85, scale: 1.1, relief: 1.18, gloss: .05, shine: 1.06 },
   { name: 'Meteorite', color: '#2A2725', pits: .7,  facets: .35, grit: .3,  scale: 1.2, relief: 1,   gloss: .6,  shine: 1 },
 ];
+// modelling clay after the plasticine reliefs: one colour, matte to waxy, lit by the board's light
+const CLAY_PRESETS = [
+  { name: 'Coral',      color: '#C9452F', gloss: .35, grain: .3,  glow: .6 },
+  { name: 'Bone',       color: '#E6E1D6', gloss: .3,  grain: .25, glow: .35 },
+  { name: 'Ochre',      color: '#D49A3E', gloss: .5,  grain: .25, glow: .55 },
+  { name: 'Periwinkle', color: '#94A8DB', gloss: .25, grain: .2,  glow: .3 },
+  { name: 'Cocoa',      color: '#6B3B27', gloss: .55, grain: .3,  glow: .3 },
+  { name: 'Iris',       color: '#4A4DA6', gloss: .4,  grain: .25, glow: .4 },
+  { name: 'Moss',       color: '#7D8D4B', gloss: .3,  grain: .35, glow: .4 },
+];
 const DEF = {
   slip: {
     size: 37, pressure: .84, speed: .15, tilt: .33, vary: .31, merge: .28, pool: .54, smooth: .92, end: 'drop', taper: 1.2,
@@ -631,13 +642,22 @@ const DEF = {
     color: '#8E8B86', pits: .85, facets: 0, grit: .75, scale: 1, relief: 1, gloss: .06, shine: .6,
     vol: 1.75, edge: 11, light: 120, shadow: 0, preset: 'Comet Pit',
   },
+  // Edge past any radius keeps every stroke round all the way over: a rolled snake of clay, never a puddle
+  clay: {
+    size: 30, pressure: .7, speed: .1, tilt: .2, vary: .22, merge: .18, pool: .3, smooth: .92, end: 'drop', taper: 1.2,
+    color: '#C9452F', gloss: .35, shine: 1, grain: .3, glow: .6, vol: 1, edge: 160, light: 135, shadow: 0, preset: 'Coral',
+  },
 };
 const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
-const BRUSHES = ['slip', 'metal', 'stone'];
-const TOOLS = ['slip', 'stone'];      // brushes offered in the pill; Metal is retired until a better one, but old Metal layers still render
-const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone' };
-const PRESETS = { slip: SLIP_PRESETS, metal: METAL_PRESETS, stone: STONE_PRESETS };
-const BGS = [['Paper', '#F4F2EE'], ['Stone', '#E2DFD8'], ['Sand', '#CDBFAD'], ['Slate', '#6F747B'], ['Ink', '#161616'], ['Clear', 'none']];
+const BRUSHES = ['slip', 'metal', 'stone', 'clay'];
+const TOOLS = ['slip', 'stone', 'clay'];      // brushes offered in the pill; Metal is retired until a better one, but old Metal layers still render
+const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone', clay: 'Clay' };
+const PRESETS = { slip: SLIP_PRESETS, metal: METAL_PRESETS, stone: STONE_PRESETS, clay: CLAY_PRESETS };
+const BGS = [['Paper', '#F4F2EE'], ['Stone', '#E2DFD8'], ['Sand', '#CDBFAD'], ['Sage', '#7F9A7E'], ['Slate', '#6F747B'], ['Ink', '#161616'], ['Clear', 'none']];
+/* The board's light (see 32-scene-light.js), kept with the drawing. New drawings get real shadows on paper;
+   drawings from before scene light keep the look they were made with until it's turned on. */
+const LIGHT_DEF = { shadows: true, angle: 135, height: 38, soft: .45, fill: .32, shade: 1, paper: 'paper' };
+const LIGHT_OLD = { ...LIGHT_DEF, shadows: false, paper: 'plain' };
 const BOARDS = [['4:3', 1600, 1200], ['1:1', 1400, 1400], ['3:4', 1200, 1600], ['16:9', 1920, 1080], ['9:16', 1080, 1920]];
 const mergeA = m => lerp(4.5, 1.32, clamp(m, 0, 1));    // field peak / threshold. Lower peak = longer tails = more fusing
 const ERASE_A = 2.2;
@@ -645,9 +665,9 @@ const ERASE_A = 2.2;
 /* ════════════════════════════════════════════════════════════════════
    state
    ════════════════════════════════════════════════════════════════════ */
-let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
-const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 3, canvas3d: true, selAll: true, snap: true, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
-const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal }, stone: { ...DEF.stone } };
+let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, light: { ...LIGHT_OLD }, layers: [], active: null };
+const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 3, canvas3d: true, selAll: true, snap: true, previewShadows: true, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
+const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal }, stone: { ...DEF.stone }, clay: { ...DEF.clay } };
 const activeLayer = () => doc.layers.find(L => L.id === doc.active) || null;
 const layerById = id => doc.layers.find(L => L.id === id);
 const brushTool = () => ui.tool !== 'erase' && ui.tool !== 'view' && ui.tool !== 'lasso';
@@ -674,7 +694,7 @@ gl.getExtension('EXT_color_buffer_half_float');
 gl.getExtension('EXT_float_blend');
 
 // GLSL lives in js/shaders.js
-const { VS_FULL, VS_STAMP, FS_STAMP, FS_COPY, FS_ERASE, FS_BG, GL_H, fsComp, VS_MESH, FS_HGT, VS_SLAB, FS_SLAB } = window.SM_SHADERS;
+const { VS_FULL, VS_STAMP, FS_STAMP, FS_COPY, FS_ERASE, FS_BG, FS_SCENE, FS_LIGHT, GL_H, fsComp, VS_MESH, FS_HGT, VS_SLAB, FS_SLAB } = window.SM_SHADERS;
 
 function compile(type, src) {
   const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -699,6 +719,8 @@ const PR = {
   mesh: program(VS_MESH, fsComp(true)),
   hgt: program(VS_FULL, FS_HGT),
   slab: program(VS_SLAB, FS_SLAB),
+  scene: program(VS_FULL, FS_SCENE),
+  light: program(VS_FULL, FS_LIGHT),
 };
 
 // stamp geometry: one quad, instanced per stamp
@@ -739,7 +761,8 @@ function makeTarget(w, hgt, fmt) {
   freeTarget(t);
 }
 function freeTarget(t) { if (!t) return; gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
-function swapTarget(a, b) { [a.tex, b.tex] = [b.tex, a.tex]; [a.fb, b.fb] = [b.fb, a.fb]; }
+function swapTarget(a, b) { [a.tex, b.tex] = [b.tex, a.tex]; [a.fb, b.fb] = [b.fb, a.fb]; fieldGen++; }
+let fieldGen = 0;      // counts writes to any height field, so the scene light knows when to look again
 function clearTarget(t) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.viewport(0, 0, t.w, t.h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
 function bindTex(unit, tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); }
 function fullscreen(prog, target, setup) {
@@ -889,6 +912,7 @@ const dirty = new Set();
 let needsDraw = true;
 
 function drawStamps(target, buf, minSig) {
+  fieldGen++;
   if (!buf.n) return;
   gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb);
   gl.viewport(0, 0, target.w, target.h);
@@ -909,10 +933,12 @@ function copyInto(src, dst) {
   fullscreen(PR.copy, dst, u => { bindTex(0, src.tex); gl.uniform1i(u.uSrc, 0); });
 }
 function eraseInto(src, eTarget, dst) {
+  fieldGen++;
   gl.disable(gl.BLEND);
   fullscreen(PR.erase, dst, u => { bindTex(0, src.tex); bindTex(1, eTarget.tex); gl.uniform1i(u.uSrc, 0); gl.uniform1i(u.uE, 1); gl.uniform1f(u.uInv, 1 / FIELD.scale); });
 }
 function addInto(src, dst) {
+  fieldGen++;
   gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE);
   fullscreen(PR.copy, dst, u => { bindTex(0, src.tex); gl.uniform1i(u.uSrc, 0); });
   gl.disable(gl.BLEND);
@@ -1099,20 +1125,24 @@ function ensureImgTex() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
+// the ground: the backdrop (colour or image) on its paper, lit by the scene. A transparent or clear board
+// keeps only the shade, as darkness, so shadows still fall on whatever it's placed over.
 function drawBg(target, transparent) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
   gl.viewport(0, 0, target ? target.w : canvas.width, target ? target.h : canvas.height);
   gl.disable(gl.BLEND);
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-  if (transparent) return;
+  const lit = SCN.mode === 1, clear = transparent || (!doc.bgImage && doc.bg === 'none');
+  if (clear && !lit) return;
   ensureImgTex();
-  if (!doc.bgImage && doc.bg === 'none') return;
   fullscreen(PR.bg, target, u => {
     gl.uniform4f(u.uView, ...(target ? WHOLE : closeup.uv));
-    const c = doc.bg === 'none' ? [1, 1, 1] : hexRgb(doc.bg);
-    gl.uniform3f(u.uBg, c[0], c[1], c[2]);
+    gl.uniform3f(u.uBg, ...bgSrgb());
     gl.uniform1i(u.uImg, doc.bgImage ? 1 : 0);
     bindTex(0, imgTex); gl.uniform1i(u.uTex, 0);
+    gl.uniform2f(u.uDoc, doc.w, doc.h); gl.uniform1f(u.uSeed, 1);
+    gl.uniform1i(u.uPaper, clear ? 0 : PAPER[doc.light.paper] || 0); gl.uniform1i(u.uClear, clear ? 1 : 0);
+    sceneUniforms(u);
   });
 }
 function lightDir(deg, el = .66) {
@@ -1138,10 +1168,13 @@ function layerUniforms(u, L, tex, tw, th) {
   hUniforms(u, L, tex);
   gl.uniform2f(u.uRes, tw, th); gl.uniform2f(u.uDoc, doc.w, doc.h);
   gl.uniform1f(u.uVol, P.vol);
-  const metal = L.brush === 'metal', stone = L.brush === 'stone';
+  const metal = L.brush === 'metal', stone = L.brush === 'stone', clay = L.brush === 'clay', scene = doc.light.shadows;
   gl.uniform1f(u.uSky, P.sky ?? .3); gl.uniform1f(u.uRim, P.rim ?? .85);
-  const Ld = lightDir(P.light, metal ? .44 : stone ? .6 : .66); gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
-  gl.uniform1i(u.uBrush, metal ? 1 : stone ? 2 : 0);
+  // clay is lit by the scene's light; the others keep the height their material was tuned for, and turn
+  // with the scene's light once it casts shadows
+  const Ld = clay ? lightOf().dir : lightDir(scene ? doc.light.angle : P.light, metal ? .44 : stone ? .6 : .66);
+  gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
+  gl.uniform1i(u.uBrush, metal ? 1 : stone ? 2 : clay ? 3 : 0);
   gl.uniform1f(u.uPits, stone ? P.pits : 0); gl.uniform1f(u.uFacets, stone ? P.facets : 0);
   gl.uniform1f(u.uDScale, P.scale ?? 1); gl.uniform1f(u.uRelief, P.relief ?? 1);
   const c0 = lin(hexRgb(metal ? P.c0 : P.color)), c1 = metal ? lin(hexRgb(P.c1)) : [0, 0, 0], c2 = metal ? lin(hexRgb(P.c2)) : [0, 0, 0];
@@ -1149,11 +1182,13 @@ function layerUniforms(u, L, tex, tw, th) {
   gl.uniform1f(u.uGloss, P.gloss ?? 0); gl.uniform1f(u.uShine, P.shine ?? 1); gl.uniform1f(u.uBreak, P.brk ?? 0);
   gl.uniform1f(u.uSpeckle, P.speckle ?? 0); gl.uniform1f(u.uGrain, (stone ? P.grit : P.grain) ?? 0); gl.uniform1f(u.uRough, P.rough ?? 0);
   gl.uniform1f(u.uContrast, P.contrast ?? 1); gl.uniform1f(u.uIri, P.iri ?? 0);
-  gl.uniform1f(u.uShadow, P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
-  gl.uniform1f(u.uSeed, L.seed || 0);
+  gl.uniform1f(u.uShadow, scene ? 0 : P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
+  gl.uniform1f(u.uSeed, L.seed || 0); gl.uniform1f(u.uGlow, P.glow ?? 0);
+  sceneUniforms(u, L);
   return Ld;
 }
 function compositeScreen() {
+  SCN = { S: SC, mode: updateScene() ? 1 : 0, li: lightOf() };
   drawBg(null, false);
   for (const L of doc.layers) {
     if (!L.visible) continue;
@@ -1162,6 +1197,156 @@ function compositeScreen() {
   }
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   scene light: one key light for the board, real shadows, occlusion, bounce
+   ════════════════════════════════════════════════════════════════════ */
+/* The board is lit like a photograph of clay on paper: a soft key light (Direction, Height, Softness), the sky
+   (Fill), and light bounced off whatever stands nearby. Three buffers at half the field's resolution hold what
+   one layer can't know alone (FS_SCENE and FS_LIGHT in js/shaders.js): every layer's height summed, the colours
+   of what's there over the backdrop, and the light that gets through. On screen they're rebuilt only when a
+   height field, a layer's form or colour, the backdrop or the light changes, so panning and zooming cost
+   nothing extra. Export builds its own at export resolution. Clay is shaded by this light alone; the other
+   materials keep their own shading and are only darkened where the scene blocks it. */
+const SC = { w: 0, h: 0, hT: null, aT: null, lb: null, ok: true, sig: '' };
+// what the drawing in progress reads: the scene buffers, how to use them (0 none, 1 shadow + occlusion,
+// 2 occlusion only, for the 3D view) and the light
+let SCN = { S: null, mode: 0, li: null };
+const PAPER = { plain: 0, paper: 1, folded: 2 };
+const withLight = d => { d.light = { ...LIGHT_OLD, ...(d.light || {}) }; return d; };
+
+const imgIds = new WeakMap(); let imgSeq = 0;
+const imgId = c => { if (!c) return 0; let i = imgIds.get(c); if (!i) { i = ++imgSeq; imgIds.set(c, i); } return i; };
+const bgSrgb = () => doc.bg === 'none' ? [1, 1, 1] : hexRgb(doc.bg);
+const albedoOf = L => lin(hexRgb(L.brush === 'metal' ? L.params.c1 : L.params.color));
+
+function lightOf(d = doc) {
+  const Lt = d.light || LIGHT_OLD;
+  const dir = lightDir(Lt.angle, Lt.height * Math.PI / 180);
+  const key = [1, .972, .935].map(v => v * (1.1 - .45 * Lt.fill));      // a warm key, a cooler sky
+  const sky = [.93, .96, 1].map(v => v * (.16 + .92 * Lt.fill));
+  return { Lt, dir, key, sky, open: key.map((v, i) => v * dir[2] + sky[i]), soft: Math.tan((1.5 + 22 * Lt.soft) * Math.PI / 180) };
+}
+
+// a mipmapped render target: blurred heights and colours are then one textureLod away
+function mipTarget(w, hgt, internal) {
+  const tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(w, hgt))) + 1, internal, w, hgt);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fb, w, h: hgt, ok };
+}
+function sceneTargets(S, w, hgt) {
+  if (S.hT && S.w === w && S.h === hgt) return S;
+  freeScene(S);
+  S.w = w; S.h = hgt;
+  S.hT = mipTarget(w, hgt, gl.RGBA16F); S.aT = mipTarget(w, hgt, gl.RGBA8); S.lb = makeTarget(w, hgt, FIELD);
+  S.ok = FIELD.scale === 1 && S.hT.ok && S.aT.ok && S.lb.ok;      // no float targets, no scene light
+  return S;
+}
+function freeScene(S) { [S.hT, S.aT, S.lb, ...(S.base || [])].forEach(freeTarget); S.hT = S.aT = S.lb = null; S.base = []; S.w = S.h = 0; }
+
+/* Building: begin (clear the heights, lay the backdrop), add each visible layer bottom to top, end (blur,
+   then the light). Split so export can build each layer's field just before adding it. Units 0 and 1 are
+   re-bound on every pass, so no sampler can still hold the target being drawn into. */
+function sceneBegin(S, n) {
+  // what each layer stands on, four layers to a target (one channel each), so stacked strokes know their height
+  S.base = S.base || [];
+  while (S.base.length < Math.ceil(n / 4)) S.base.push(makeTarget(S.w, S.h, FIELD));
+  S.baseOf = new Map();
+  gl.disable(gl.BLEND);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, S.hT.fb); gl.viewport(0, 0, S.w, S.h);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  ensureImgTex();
+  fullscreen(PR.scene, S.aT, u => {
+    bindTex(0, null); bindTex(1, doc.bgImage ? imgTex : null); bindTex(2, null);
+    gl.uniform1i(u.uField, 0); gl.uniform1i(u.uTex, 1); gl.uniform1i(u.uBase, 2); gl.uniform1i(u.uMode, 2);
+    gl.uniform3f(u.uCol, ...bgSrgb()); gl.uniform1i(u.uImg, doc.bgImage ? 1 : 0);
+  });
+}
+function sceneAdd(S, L, tex, k) {
+  // what it stands on: the heights so far, blurred over about its radius, into its channel of a base target
+  const bt = S.base[k >> 2], c = k & 3, ch = [0, 1, 2, 3].map(i => i === c ? 1 : 0);
+  if (k) { gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, S.hT.tex); gl.generateMipmap(gl.TEXTURE_2D); gl.bindTexture(gl.TEXTURE_2D, null); }
+  gl.disable(gl.BLEND); gl.colorMask(c === 0, c === 1, c === 2, c === 3);
+  fullscreen(PR.scene, bt, u => {
+    bindTex(0, null); bindTex(1, S.hT.tex); bindTex(2, null);
+    gl.uniform1i(u.uField, 0); gl.uniform1i(u.uTex, 1); gl.uniform1i(u.uBase, 2); gl.uniform1i(u.uMode, 3);
+    gl.uniform1f(u.uLod, k ? Math.max(0, Math.log2(L.params.size * .9 * L.params.vol / (doc.w / S.w))) : 0);
+  });
+  gl.colorMask(true, true, true, true);
+  S.baseOf.set(L.id, [bt, c]);
+  // its surface, laid over the heights so far
+  gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  fullscreen(PR.scene, S.hT, u => {
+    hUniforms(u, L, tex); bindTex(1, null); bindTex(2, bt.tex);
+    gl.uniform1i(u.uTex, 1); gl.uniform1i(u.uBase, 2); gl.uniform4f(u.uBaseCh, ...ch); gl.uniform1i(u.uMode, 0);
+    gl.uniform1f(u.uK, L.params.vol); gl.uniform1f(u.uLift, L.brush === 'clay' ? 1 : 0);
+  });
+  fullscreen(PR.scene, S.aT, u => { hUniforms(u, L, tex); bindTex(1, null); bindTex(2, null); gl.uniform1i(u.uTex, 1); gl.uniform1i(u.uBase, 2); gl.uniform1i(u.uMode, 1); gl.uniform3f(u.uCol, ...albedoOf(L)); });
+  gl.disable(gl.BLEND);
+}
+function sceneEnd(S, layers, li, steps) {
+  gl.activeTexture(gl.TEXTURE7);
+  for (const t of [S.hT, S.aT]) { gl.bindTexture(gl.TEXTURE_2D, t.tex); gl.generateMipmap(gl.TEXTURE_2D); }
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  // how far a shadow can fall: the tallest likely stack over the tangent of the light's height
+  let hmax = 0;
+  for (const L of layers) { const P = L.params; hmax = Math.max(hmax, Math.min(P.size * .85 * (1 + P.pool * .6), (P.edge ?? 40) * 1.5) * P.vol * (L.brush === 'clay' ? 2 : 1)); }
+  S.reach = clamp(hmax * 1.4 / Math.tan(li.Lt.height * Math.PI / 180), 24, 900); S.steps = steps;
+  fullscreen(PR.light, S.lb, u => { gl.uniform2f(u.uDoc, doc.w, doc.h); marchUniforms(u, S, li, 6); });
+}
+
+// the screen's scene, rebuilt when what it depends on changed; false when there's no scene light to read
+const SHADOW_STEPS = 40, SHADOW_STEPS_LIVE = 24;
+function updateScene() {
+  if (!doc.light.shadows || !SC.ok) return false;
+  sceneTargets(SC, Math.max(1, Math.ceil(T.w / 2)), Math.max(1, Math.ceil(T.h / 2)));
+  if (!SC.ok) { freeScene(SC); SC.ok = false; return false; }
+  const Lt = doc.light, steps = ui.previewShadows ? (drawing ? SHADOW_STEPS_LIVE : SHADOW_STEPS) : 0;
+  const layers = doc.layers.filter(L => L.visible);
+  const sig = [fieldGen, SC.w, SC.h, doc.bg, imgId(doc.bgImage), Lt.angle, Lt.height, Lt.soft, steps, drawing ? drawing.L.id : '',
+    ...layers.map(L => `${L.id}:${L.params.vol}:${L.params.merge}:${L.params.edge}:${L.params.color || L.params.c1}`)].join('|');
+  if (sig === SC.sig) return true;
+  SC.sig = sig;
+  const li = lightOf();
+  sceneBegin(SC, layers.length);
+  layers.forEach((L, k) => sceneAdd(SC, L, drawing && drawing.L === L ? T.live.tex : layerTarget(L).tex, k));
+  sceneEnd(SC, layers, li, steps);
+  return true;
+}
+// what a shadow march needs (SCENE_GLSL), with the heights on texture unit `unit`
+function marchUniforms(u, S, li, unit) {
+  bindTex(unit, S.hT.tex); gl.uniform1i(u.uSH, unit);
+  gl.uniform1f(u.uTexDoc, doc.w / S.w); gl.uniform3f(u.uSL, ...li.dir);
+  gl.uniform1f(u.uSoft, li.soft); gl.uniform1f(u.uReach, S.reach); gl.uniform1i(u.uSteps, S.steps);
+  gl.uniform2f(u.uLBTexel, 1 / S.w, 1 / S.h);
+}
+// the scene uniforms every receiver (ground, layers, the 3D mesh) shares
+function sceneUniforms(u, L) {
+  const { S, mode } = SCN, li = SCN.li || lightOf();
+  const base = mode && L && S.baseOf && S.baseOf.get(L.id);
+  bindTex(3, base ? base[0].tex : null); gl.uniform1i(u.uBase, 3);
+  gl.uniform4f(u.uBaseCh, ...[0, 1, 2, 3].map(i => base && base[1] === i ? 1 : 0));
+  gl.uniform1i(u.uLit, mode);
+  if (mode) marchUniforms(u, S, li, 6); else { bindTex(6, null); gl.uniform1i(u.uSH, 6); }
+  bindTex(4, mode ? S.lb.tex : null); gl.uniform1i(u.uLB, 4);
+  bindTex(5, mode ? S.aT.tex : null); gl.uniform1i(u.uSA, 5);
+  gl.uniform3f(u.uKeyC, ...li.key); gl.uniform3f(u.uSkyC, ...li.sky); gl.uniform3f(u.uOpenC, ...li.open);
+  gl.uniform3f(u.uBgC, ...lin(bgSrgb())); gl.uniform3f(u.uSL, ...li.dir);
+  gl.uniform1f(u.uShade, li.Lt.shade ?? 1);
+  // what's around, for bounce: blurred over ~14 doc px of the scene (and twice that seen from the paper)
+  const texDoc = S ? doc.w / S.w : 2;
+  gl.uniform1f(u.uEnvLod, Math.max(0, Math.log2(14 / texDoc))); gl.uniform1f(u.uBleedLod, Math.max(0, Math.log2(22 / texDoc)));
+}
 /* ════════════════════════════════════════════════════════════════════
    3D view: the height field as a relief you can turn
    ════════════════════════════════════════════════════════════════════ */
@@ -1496,6 +1681,7 @@ function frame() {
   const moving = three.on && step3D(t0);       // may finish leaving 3D, so check again before drawing
   if (three.on) {
     const busy = moving || t0 - three.touched < 140;
+    SCN = { S: SC, mode: updateScene() ? 2 : 0, li: lightOf() };    // occlusion only: the room's light turns with the view
     render3D(null, busy ? .6 : 1);
     clearTimeout(three.settle);
     if (busy && !moving) three.settle = setTimeout(request, 160);   // the sharp frame once hands come off
@@ -1690,7 +1876,7 @@ addEventListener('wheel', e => {
    ════════════════════════════════════════════════════════════════════ */
 const hist = { undo: [], redo: [] };
 const cloneLayers = ls => ls.map(L => ({ ...L, params: { ...L.params }, strokes: L.strokes.slice(), ops: (L.ops || []).map(o => ({ ...o })) }));
-const snapshot = () => ({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: doc.bgImage, active: doc.active, layers: cloneLayers(doc.layers) });
+const snapshot = () => ({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: doc.bgImage, light: { ...doc.light }, active: doc.active, layers: cloneLayers(doc.layers) });
 function commit(snap) {
   hist.undo.push(snap); if (hist.undo.length > 150) hist.undo.shift();
   hist.redo.length = 0; updUndo(); docDirty = true; save();
@@ -1703,7 +1889,7 @@ const beginEditDoc = beginEdit, endEditDoc = endEdit;
 function restore(s) {
   dropSel();
   const sized = s.w !== doc.w || s.h !== doc.h;
-  doc = { w: s.w, h: s.h, bg: s.bg, bgImage: s.bgImage, active: s.active, layers: cloneLayers(s.layers) };
+  doc = withLight({ w: s.w, h: s.h, bg: s.bg, bgImage: s.bgImage, light: s.light, active: s.active, layers: cloneLayers(s.layers) });
   gcTargets();
   for (const L of doc.layers) dirty.add(L.id);
   if (sized) { view.z = 1; fit(); updateResolution(); }
@@ -1769,12 +1955,12 @@ async function docRecord(d, id) {
   const layers = d.layers.map(L => ({ id: L.id, brush: L.brush, name: L.name, visible: L.visible, seed: L.seed, params: { ...L.params },
     strokes: L.strokes.map(s => ({ ...s, pts: packPts(s.pts) })),
     ops: (L.ops || []).map(o => ({ ...o, poly: o.poly && o.poly.map(r1), dx: r1(o.dx || 0), dy: r1(o.dy || 0) })) }));
-  return { id, v: SESSION_V, renderer: RENDERER, w: d.w, h: d.h, bg: d.bg, active: d.active, layers,
+  return { id, v: SESSION_V, renderer: RENDERER, w: d.w, h: d.h, bg: d.bg, light: d.light, active: d.active, layers,
     bgImage: d.bgImage ? await canvasBlob(d.bgImage) : null };
 }
 async function docFromRecord(r) {
-  const d = { w: r.w, h: r.h, bg: r.bg, active: r.active, bgImage: r.bgImage ? await blobCanvas(r.bgImage).catch(() => null) : null,
-    layers: (r.layers || []).map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) };
+  const d = withLight({ w: r.w, h: r.h, bg: r.bg, light: r.light, active: r.active, bgImage: r.bgImage ? await blobCanvas(r.bgImage).catch(() => null) : null,
+    layers: (r.layers || []).map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) });
   if (!d.layers.some(L => L.id === d.active)) d.active = d.layers.length ? d.layers[d.layers.length - 1].id : null;
   return d;
 }
@@ -1793,7 +1979,7 @@ function savePrefs() {
   if (isLab || !prefsReady) return;
   try {
     localStorage.setItem(KEY, JSON.stringify({ v: 2, cur: session ? session.id : null, last: lastParams,
-      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, canvas3d: ui.canvas3d, selAll: ui.selAll, snap: ui.snap, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
+      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, canvas3d: ui.canvas3d, selAll: ui.selAll, snap: ui.snap, previewShadows: ui.previewShadows, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
   } catch (e) {}
 }
 function save() {
@@ -1835,7 +2021,7 @@ async function flush() {
   if (thumbT) await saveThumb();
 }
 function setDocument(d) {
-  doc = d;
+  doc = withLight(d);
   hist.undo.length = 0; hist.redo.length = 0; updUndo();
   gcTargets();
   for (const L of doc.layers) dirty.add(L.id);
@@ -1864,7 +2050,7 @@ async function startSession(d, name) {
 }
 const newSession = () => guarded(async () => {
   await flush();
-  await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, layers: [], active: null });
+  await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, light: { ...LIGHT_DEF }, layers: [], active: null });
   toast(`${session.name} started`);
 });
 const deleteSession = id => guarded(async () => {
@@ -1877,7 +2063,7 @@ const deleteSession = id => guarded(async () => {
   if (session && session.id === id) {
     session = null;
     if (sessions.length) { const next = sessions[0]; session = next; setDocument(await docFromRecord(await DB.get('docs', next.id))); savePrefs(); }
-    else await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, layers: [], active: null });
+    else await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, light: { ...LIGHT_DEF }, layers: [], active: null });
   }
   renderSessions();
   toast(`${meta.name} deleted`, { label: 'Undo', fn: async () => {
@@ -2448,6 +2634,7 @@ const ballCss = L => L && L.params ? presetBall(L.brush, L.params) : '';
 function presetBall(brush, pr) {
   if (brush === 'metal') return `radial-gradient(circle at 34% 30%, ${pr.c2} 0 12%, ${pr.c1} 38%, ${pr.c0} 72%, ${pr.c1} 100%)`;
   const c = hexRgb(pr.color), lo = toHex(c.map(v => v * .62)), hi = toHex(mix3(c, [1, 1, 1], .55));
+  if (brush === 'clay') return `radial-gradient(circle at 36% 30%, ${toHex(mix3(c, [1, 1, 1], .32))} 0 14%, ${pr.color} 50%, ${toHex(c.map(v => v * .55))} 100%)`;
   if (brush === 'stone') {
     // a few dark pits for craters; a hard white glint for glossy stone
     const pit = (x, y, r) => `radial-gradient(circle at ${x}% ${y}%, rgba(0,0,0,${.18 + .3 * pr.pits}) 0 ${r}%, transparent ${r + 2}%)`;
@@ -2694,13 +2881,18 @@ function renderPanel() {
       ...[['pits', 'Pits', 0, 1, .01], ['facets', 'Facets', 0, 1, .01], ['grit', 'Grit', 0, 1, .01], ['scale', 'Scale', .3, 3, .01], ['relief', 'Relief', 0, 2, .01]].map(ps),
       sec('Finish'),
       ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01]].map(ps));
+  } else if (brush === 'clay') {
+    sp.append(sec('Colour'), colorRow('Clay', () => P.color, set('color')),
+      sec('Finish'),
+      ...[['gloss', 'Sheen', 0, 1, .01], ['grain', 'Texture', 0, 1, .01], ['glow', 'Glow', 0, 1, .01]].map(ps));
   } else {
     sp.append(sec('Colour'), colorRow('Glaze', () => P.color, set('color')),
       sec('Finish'),
       ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01], ['brk', 'Break', 0, 1, .01], ['speckle', 'Speckle', 0, 1, .01], ['grain', 'Grain', 0, 1, .01]].map(ps));
   }
-  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, 80, 1]].map(ps),
-    sec('Light'), ...[['light', 'Light', 0, 360, 1, '°'], ['shadow', 'Shadow', 0, 1, .01]].map(ps));
+  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, brush === 'clay' ? 160 : 80, 1]].map(ps), sec('Light'));
+  if (brush === 'clay' || doc.light.shadows) sp.append(hint(`Lit by the board's light, set in <b>Canvas → Light</b>${brush === 'clay' ? '' : ' while shadows are on'}.`));
+  else sp.append(...[['light', 'Light', 0, 360, 1, '°'], ['shadow', 'Shadow', 0, 1, .01]].map(ps));
   markPresets();
 
   // Canvas
@@ -2721,9 +2913,22 @@ function renderPanel() {
   }
   cp.append(sec('Background'), bgs);
   if (doc.bg !== 'none') cp.append(colorRow('Colour', () => doc.bg, v => { doc.bg = v; doc.bgImage = null; markBgs(); request(); }));
+  if (doc.bg !== 'none' || doc.bgImage) cp.append(seg([['plain', 'Plain'], ['paper', 'Paper'], ['folded', 'Folded']], () => doc.light.paper,
+    v => { mutate(() => { doc.light.paper = v; }); request(); }));
   cp.append(h('div', { class: 'btnrow' },
     h('button', { type: 'button', class: 'btn', onclick: () => $('#file').click() }, doc.bgImage ? 'Replace image' : 'Draw on an image'),
     doc.bgImage ? h('button', { type: 'button', class: 'btn', onclick: () => { mutate(() => { doc.bgImage = null; }); afterChange(); } }, 'Remove image') : null));
+  // the board's light: one key light and the sky, shared by every layer
+  const lset = k => v => { doc.light[k] = v; request(); };
+  cp.append(sec('Light'),
+    toggleRow('Shadows', () => doc.light.shadows, v => { mutate(() => { doc.light.shadows = v; }); afterChange(); }),
+    slider({ label: 'Direction', min: 0, max: 360, step: 1, suf: '°', get: () => doc.light.angle, set: lset('angle') }),
+    slider({ label: 'Height', min: 8, max: 80, step: 1, suf: '°', get: () => doc.light.height, set: lset('height') }),
+    slider({ label: 'Softness', min: 0, max: 1, step: .01, get: () => doc.light.soft, set: lset('soft') }),
+    slider({ label: 'Fill', min: 0, max: 1, step: .01, get: () => doc.light.fill, set: lset('fill') }));
+  if (doc.light.shadows) cp.append(
+    toggleRow('Shadows in preview', () => ui.previewShadows, v => { ui.previewShadows = v; request(); }),
+    hint('Turn off to keep drawing smooth on a slower device. Contact shading stays, and exports always include the shadows.'));
   cp.append(sec('Export'),
     seg([['1', '1×'], ['2', '2×'], ['3', '3×'], ['4', '4×']], () => ui.exp.scale, v => { ui.exp.scale = +v; save(); }),
     toggleRow('Transparent background', () => ui.exp.transparent, v => ui.exp.transparent = v),
@@ -3003,12 +3208,25 @@ function renderCanvas(S, transparent, crop) {
   const ctx = { field: makeTarget(w, hgt, FIELD), scratch: makeTarget(w, hgt, FIELD), erase: makeTarget(w, hgt, FIELD), group: makeTarget(w, hgt, FIELD), minSig: .7 / S };
   const out = makeTarget(w, hgt, FMT8);
   const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+  const layers = doc.layers.filter(L => L.visible && L.strokes.length), prev = SCN;
+  // scene light at this resolution: every layer's height and colour first, then the light, then the picture
+  let scn = null;
+  if (doc.light.shadows) {
+    scn = sceneTargets({}, Math.ceil(w / 2), Math.ceil(hgt / 2));
+    if (scn.ok) {
+      const li = lightOf();
+      sceneBegin(scn, layers.length);
+      layers.forEach((L, k) => { buildLayer(L, ctx); sceneAdd(scn, L, ctx.field.tex, k); });
+      sceneEnd(scn, layers, li, SHADOW_STEPS + 16);
+      SCN = { S: scn, mode: 1, li };
+    }
+  }
+  const sh = SCN.mode === 1 ? 1 / Math.tan(doc.light.height * Math.PI / 180) : 0;   // shadows reach past the strokes
   drawBg(out, transparent);
-  for (const L of doc.layers) {
-    if (!L.visible || !L.strokes.length) continue;
+  for (const L of layers) {
     const lb = [Infinity, Infinity, -Infinity, -Infinity];
     buildLayer(L, ctx, lb);
-    const pad = (L.params.size * .24 + 3) * L.params.vol * 1.6 + 6;
+    const pad = (L.params.size * .24 + 3) * L.params.vol * 1.6 + 6 + L.params.size * .9 * L.params.vol * sh;
     bounds[0] = Math.min(bounds[0], lb[0] - pad); bounds[1] = Math.min(bounds[1], lb[1] - pad);
     bounds[2] = Math.max(bounds[2], lb[2] + pad); bounds[3] = Math.max(bounds[3], lb[3] + pad);
     drawLayer(L, ctx.field.tex, out, w, hgt);
@@ -3023,6 +3241,8 @@ function renderCanvas(S, transparent, crop) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
   gl.readPixels(x0, hgt - y1, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, px);
   [ctx.field, ctx.scratch, ctx.erase, ctx.group, out].forEach(freeTarget);
+  if (scn) freeScene(scn);
+  SCN = prev;
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.disable(gl.BLEND);
   return { cv: pixelCanvas(px, cw, ch), cw, ch };
@@ -3296,7 +3516,7 @@ function synth(path, { dur = 1600, speed = () => 1, pressure = () => .5, N = 700
   return { id: uid(), seed: Math.random() * 1000, sym: 'off', erase: false, hasP: true, hasT: false, pts };
 }
 function seedDemo() {
-  doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
+  doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, light: { ...LIGHT_OLD }, layers: [], active: null };
   const slip = newLayer('slip');
   slip.strokes.push(synth(u => {
     const a = u * Math.PI * 2 * 3.3;
@@ -3362,9 +3582,9 @@ boot();
 addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
 addEventListener('pagehide', () => saveNow());
 window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, export3DPNG, exportModel, T, view, applyView, zoomToPct, dirty, renderPanel, three, animate3D, heightGrid, render3D,
-  closeup, placeCanvas, sel, selectAll, deleteSel, dropSel, screenToDoc,
+  closeup, placeCanvas, sel, selectAll, deleteSel, dropSel, screenToDoc, SC, lightOf, renderCanvas, compositeScreen,
   stamps(st, P) { const b = new FBuf(); strokeStamps(st, P, b, doc.w, doc.h, .5); return Array.from(b.a.subarray(0, b.n)); },
-  setDoc(d) { doc = d; gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); },
+  setDoc(d) { doc = withLight(d); gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); },
   demo() { seedDemo(); this.setDoc(doc); } };
 if (/[?&]lab=/.test(location.search)) document.body.append(h('script', { src: 'dev/lab.js' }));   // local A/B against reference images (dev only)
 if (/[?&]test\b/.test(location.search)) document.body.append(h('script', { src: 'dev/test.js' }));   // __sm.test checks (dev only)

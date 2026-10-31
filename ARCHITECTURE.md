@@ -30,12 +30,13 @@ page order; a new file takes a free number between its neighbours and gets its o
 | JS file | Owns |
 |---|---|
 | `src/js/00-helpers.js` | Opens the IIFE. `$`, `$$`, maths (`clamp`, `lerp`, `sstep`), colour helpers, `h()` element builder, `ICON`. |
-| `src/js/05-brushes.js` | Slip, metal and stone presets, `DEF`, `GEOM`, `BRUSHES`, `TOOLS`, backgrounds `BGS`, `BOARDS`. |
+| `src/js/05-brushes.js` | Slip, metal, stone and clay presets, `LIGHT_DEF`, `DEF`, `GEOM`, `BRUSHES`, `TOOLS`, backgrounds `BGS`, `BOARDS`. |
 | `src/js/10-state.js` | `doc` (the drawing) and `ui` (tool, panel, prefs), layer lookups, `newLayer`. |
 | `src/js/15-webgl.js` | The WebGL2 context, shader programs from `js/shaders.js`, VAOs and buffers, render targets. |
 | `src/js/20-stamps.js` | Turning a stroke's samples into stamps: `FBuf`, noise, `emitter`, `strokeStamps`. |
 | `src/js/25-fields.js` | Building each layer's height field from stamps (draw, erase, moved selections), dirty tracking, live strokes. |
 | `src/js/30-compositing.js` | Background and image textures, light direction, height uniforms, compositing layers to the screen. |
+| `src/js/32-scene-light.js` | The board's light: key, sky and paper (`doc.light`), the scene buffers (summed heights, colours, the light that gets through), `updateScene`, `sceneUniforms`. |
 | `src/js/35-view-3d.js` | The 3D relief view: pose and camera, grid, slab, the MSAA target, `buildStacks`, `render3D`, orbit input. |
 | `src/js/40-frame-loop.js` | `request()` and the frame loop, the status readout. |
 | `src/js/45-view.js` | 2D view: fit, zoom and pan, the zoom bar, board rotation, resolution, the close-up. |

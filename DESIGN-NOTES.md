@@ -105,3 +105,41 @@ what, and `node dev/build.mjs --check` fails if that map or `index.html` falls o
 - **It keeps the hand's weight.** Each sample keeps its pressure, time and tilt, placed by how far along the stroke it came, so a line that was pressed harder at one end still swells there. The samples taken during the hold are dropped, so the end doesn't pool. Snapped strokes skip smoothing (it would cut inside an arc), and a circle drops its last stamp where it would sit on its first, so there's no heavy spot at the seam.
 - **Off switch:** Brush tab → Shapes → *Hold to snap*, for when you want a still pen to pool on a straight-ish stroke.
 
+
+## Round 12: Clay, and a light for the whole board (1 Nov 2026)
+Aim (her references: plasticine reliefs photographed on green paper): one colour of clay, one colour of
+paper, both textured, with real dimension: "not pressed by a flat surface or placed on a flatbed scanner".
+- **Clay brush.** Round all the way over (Edge past any radius, so wide strokes never flatten into a plateau),
+  matte to waxy (Sheen), hand-worked lumps and tooth (Texture), light that soaks in at the terminator and turns
+  the shadow side a deep saturated colour (Glow). Seven presets after the references.
+- **The board has one light** (Canvas → Light: Direction, Height, Softness, Fill), kept with the drawing.
+  Clay is lit only by it: a warm key, a cooler sky, and bounce from whatever is around (green paper greens the
+  clay's lower walls; red clay warms the paper beside it). Everything is divided by what open flat paper
+  receives, so a lit top and open paper show exactly the colours picked.
+- **Why it looked pressed flat:** a snake of clay on paper is a whole cylinder. The heights held only its
+  visible upper half, so its shadow barely left its own outline. The scene now stands clay on its hidden lower
+  half (one radius), which is what gives the long soft shadows and the dark crease where it meets the paper.
+- **Real shadows** (32-scene-light.js, FS_SCENE / FS_LIGHT / SCENE_GLSL in shaders.js). Three buffers at half
+  the field's resolution: every layer's surface, the colours of what's there, and the key light that gets
+  through. Shadows march over the heights toward the light; the ray's closest pass over anything in the way,
+  over its distance, is the penumbra, so they're sharp where they touch and soft further out. Occlusion
+  (contact shading) is read where it's needed from blurred heights. Rebuilt only when something it depends on
+  changes; panning costs nothing. Measured against the reference photo: tube from 236 (pink sheen) down to 55
+  at the contact, shadow on the paper about half the paper's brightness.
+- **Layers drape.** A layer stands on the layers below blurred over about its own radius, and its normals tilt
+  by that slope, so a snake laid across another climbs over it and down instead of stepping off a cliff.
+- **Bugs fought (all from the half-res buffers meeting full-res outlines):** a jagged dark fringe where a
+  stroke's rim read the paper's shadow (each point now reads only light-buffer texels at its own height); a flat
+  dark band hugging every outline (contact shading clipped to its floor; now eased, never clipped); dotted
+  dark specks on lit edges (paper texels tucked into the outline's half-res staircase shadowed themselves on
+  the stroke beside them; paper rays start a texel and a half out). Her words: "not a fan of the harsh darker
+  outline along the edges of the brush".
+- **Paper:** Plain / Paper / Folded under the background swatches (new swatch: Sage). Formation, fibres, tooth
+  the light rakes across, a gentle cockle; Folded adds a valley and a ridge with the panels tilted a little.
+- **Shadows in preview** turns the cast shadows off on screen for a slower iPad; contact shading stays and
+  exports always include them. A transparent export keeps the shadows as darkness.
+- **Older drawings** open with the light off and plain paper, and render exactly as before (checked pixel for
+  pixel against the previous build). With the light on, slip and stone keep their own shading, turn with the
+  board's light and are darkened where the scene blocks it; their old per-layer Shadow slider steps aside.
+- Not yet: the 3D view gets the occlusion but not cast shadows (its light turns with the room), and its slab
+  shows plain paper. Black velvet held off on purpose.

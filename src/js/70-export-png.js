@@ -9,12 +9,25 @@ function renderCanvas(S, transparent, crop) {
   const ctx = { field: makeTarget(w, hgt, FIELD), scratch: makeTarget(w, hgt, FIELD), erase: makeTarget(w, hgt, FIELD), group: makeTarget(w, hgt, FIELD), minSig: .7 / S };
   const out = makeTarget(w, hgt, FMT8);
   const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+  const layers = doc.layers.filter(L => L.visible && L.strokes.length), prev = SCN;
+  // scene light at this resolution: every layer's height and colour first, then the light, then the picture
+  let scn = null;
+  if (doc.light.shadows) {
+    scn = sceneTargets({}, Math.ceil(w / 2), Math.ceil(hgt / 2));
+    if (scn.ok) {
+      const li = lightOf();
+      sceneBegin(scn, layers.length);
+      layers.forEach((L, k) => { buildLayer(L, ctx); sceneAdd(scn, L, ctx.field.tex, k); });
+      sceneEnd(scn, layers, li, SHADOW_STEPS + 16);
+      SCN = { S: scn, mode: 1, li };
+    }
+  }
+  const sh = SCN.mode === 1 ? 1 / Math.tan(doc.light.height * Math.PI / 180) : 0;   // shadows reach past the strokes
   drawBg(out, transparent);
-  for (const L of doc.layers) {
-    if (!L.visible || !L.strokes.length) continue;
+  for (const L of layers) {
     const lb = [Infinity, Infinity, -Infinity, -Infinity];
     buildLayer(L, ctx, lb);
-    const pad = (L.params.size * .24 + 3) * L.params.vol * 1.6 + 6;
+    const pad = (L.params.size * .24 + 3) * L.params.vol * 1.6 + 6 + L.params.size * .9 * L.params.vol * sh;
     bounds[0] = Math.min(bounds[0], lb[0] - pad); bounds[1] = Math.min(bounds[1], lb[1] - pad);
     bounds[2] = Math.max(bounds[2], lb[2] + pad); bounds[3] = Math.max(bounds[3], lb[3] + pad);
     drawLayer(L, ctx.field.tex, out, w, hgt);
@@ -29,6 +42,8 @@ function renderCanvas(S, transparent, crop) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
   gl.readPixels(x0, hgt - y1, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, px);
   [ctx.field, ctx.scratch, ctx.erase, ctx.group, out].forEach(freeTarget);
+  if (scn) freeScene(scn);
+  SCN = prev;
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.disable(gl.BLEND);
   return { cv: pixelCanvas(px, cw, ch), cw, ch };

@@ -22,6 +22,7 @@ function frame() {
   const moving = three.on && step3D(t0);       // may finish leaving 3D, so check again before drawing
   if (three.on) {
     const busy = moving || t0 - three.touched < 140;
+    SCN = { S: SC, mode: updateScene() ? 2 : 0, li: lightOf() };    // occlusion only: the room's light turns with the view
     render3D(null, busy ? .6 : 1);
     clearTimeout(three.settle);
     if (busy && !moving) three.settle = setTimeout(request, 160);   // the sharp frame once hands come off

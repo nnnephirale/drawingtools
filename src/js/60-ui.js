@@ -33,6 +33,7 @@ const ballCss = L => L && L.params ? presetBall(L.brush, L.params) : '';
 function presetBall(brush, pr) {
   if (brush === 'metal') return `radial-gradient(circle at 34% 30%, ${pr.c2} 0 12%, ${pr.c1} 38%, ${pr.c0} 72%, ${pr.c1} 100%)`;
   const c = hexRgb(pr.color), lo = toHex(c.map(v => v * .62)), hi = toHex(mix3(c, [1, 1, 1], .55));
+  if (brush === 'clay') return `radial-gradient(circle at 36% 30%, ${toHex(mix3(c, [1, 1, 1], .32))} 0 14%, ${pr.color} 50%, ${toHex(c.map(v => v * .55))} 100%)`;
   if (brush === 'stone') {
     // a few dark pits for craters; a hard white glint for glossy stone
     const pit = (x, y, r) => `radial-gradient(circle at ${x}% ${y}%, rgba(0,0,0,${.18 + .3 * pr.pits}) 0 ${r}%, transparent ${r + 2}%)`;
@@ -279,13 +280,18 @@ function renderPanel() {
       ...[['pits', 'Pits', 0, 1, .01], ['facets', 'Facets', 0, 1, .01], ['grit', 'Grit', 0, 1, .01], ['scale', 'Scale', .3, 3, .01], ['relief', 'Relief', 0, 2, .01]].map(ps),
       sec('Finish'),
       ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01]].map(ps));
+  } else if (brush === 'clay') {
+    sp.append(sec('Colour'), colorRow('Clay', () => P.color, set('color')),
+      sec('Finish'),
+      ...[['gloss', 'Sheen', 0, 1, .01], ['grain', 'Texture', 0, 1, .01], ['glow', 'Glow', 0, 1, .01]].map(ps));
   } else {
     sp.append(sec('Colour'), colorRow('Glaze', () => P.color, set('color')),
       sec('Finish'),
       ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01], ['brk', 'Break', 0, 1, .01], ['speckle', 'Speckle', 0, 1, .01], ['grain', 'Grain', 0, 1, .01]].map(ps));
   }
-  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, 80, 1]].map(ps),
-    sec('Light'), ...[['light', 'Light', 0, 360, 1, '°'], ['shadow', 'Shadow', 0, 1, .01]].map(ps));
+  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, brush === 'clay' ? 160 : 80, 1]].map(ps), sec('Light'));
+  if (brush === 'clay' || doc.light.shadows) sp.append(hint(`Lit by the board's light, set in <b>Canvas → Light</b>${brush === 'clay' ? '' : ' while shadows are on'}.`));
+  else sp.append(...[['light', 'Light', 0, 360, 1, '°'], ['shadow', 'Shadow', 0, 1, .01]].map(ps));
   markPresets();
 
   // Canvas
@@ -306,9 +312,22 @@ function renderPanel() {
   }
   cp.append(sec('Background'), bgs);
   if (doc.bg !== 'none') cp.append(colorRow('Colour', () => doc.bg, v => { doc.bg = v; doc.bgImage = null; markBgs(); request(); }));
+  if (doc.bg !== 'none' || doc.bgImage) cp.append(seg([['plain', 'Plain'], ['paper', 'Paper'], ['folded', 'Folded']], () => doc.light.paper,
+    v => { mutate(() => { doc.light.paper = v; }); request(); }));
   cp.append(h('div', { class: 'btnrow' },
     h('button', { type: 'button', class: 'btn', onclick: () => $('#file').click() }, doc.bgImage ? 'Replace image' : 'Draw on an image'),
     doc.bgImage ? h('button', { type: 'button', class: 'btn', onclick: () => { mutate(() => { doc.bgImage = null; }); afterChange(); } }, 'Remove image') : null));
+  // the board's light: one key light and the sky, shared by every layer
+  const lset = k => v => { doc.light[k] = v; request(); };
+  cp.append(sec('Light'),
+    toggleRow('Shadows', () => doc.light.shadows, v => { mutate(() => { doc.light.shadows = v; }); afterChange(); }),
+    slider({ label: 'Direction', min: 0, max: 360, step: 1, suf: '°', get: () => doc.light.angle, set: lset('angle') }),
+    slider({ label: 'Height', min: 8, max: 80, step: 1, suf: '°', get: () => doc.light.height, set: lset('height') }),
+    slider({ label: 'Softness', min: 0, max: 1, step: .01, get: () => doc.light.soft, set: lset('soft') }),
+    slider({ label: 'Fill', min: 0, max: 1, step: .01, get: () => doc.light.fill, set: lset('fill') }));
+  if (doc.light.shadows) cp.append(
+    toggleRow('Shadows in preview', () => ui.previewShadows, v => { ui.previewShadows = v; request(); }),
+    hint('Turn off to keep drawing smooth on a slower device. Contact shading stays, and exports always include the shadows.'));
   cp.append(sec('Export'),
     seg([['1', '1×'], ['2', '2×'], ['3', '3×'], ['4', '4×']], () => ui.exp.scale, v => { ui.exp.scale = +v; save(); }),
     toggleRow('Transparent background', () => ui.exp.transparent, v => ui.exp.transparent = v),

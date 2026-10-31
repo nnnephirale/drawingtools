@@ -15,20 +15,24 @@ function ensureImgTex() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
+// the ground: the backdrop (colour or image) on its paper, lit by the scene. A transparent or clear board
+// keeps only the shade, as darkness, so shadows still fall on whatever it's placed over.
 function drawBg(target, transparent) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
   gl.viewport(0, 0, target ? target.w : canvas.width, target ? target.h : canvas.height);
   gl.disable(gl.BLEND);
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-  if (transparent) return;
+  const lit = SCN.mode === 1, clear = transparent || (!doc.bgImage && doc.bg === 'none');
+  if (clear && !lit) return;
   ensureImgTex();
-  if (!doc.bgImage && doc.bg === 'none') return;
   fullscreen(PR.bg, target, u => {
     gl.uniform4f(u.uView, ...(target ? WHOLE : closeup.uv));
-    const c = doc.bg === 'none' ? [1, 1, 1] : hexRgb(doc.bg);
-    gl.uniform3f(u.uBg, c[0], c[1], c[2]);
+    gl.uniform3f(u.uBg, ...bgSrgb());
     gl.uniform1i(u.uImg, doc.bgImage ? 1 : 0);
     bindTex(0, imgTex); gl.uniform1i(u.uTex, 0);
+    gl.uniform2f(u.uDoc, doc.w, doc.h); gl.uniform1f(u.uSeed, 1);
+    gl.uniform1i(u.uPaper, clear ? 0 : PAPER[doc.light.paper] || 0); gl.uniform1i(u.uClear, clear ? 1 : 0);
+    sceneUniforms(u);
   });
 }
 function lightDir(deg, el = .66) {
@@ -54,10 +58,13 @@ function layerUniforms(u, L, tex, tw, th) {
   hUniforms(u, L, tex);
   gl.uniform2f(u.uRes, tw, th); gl.uniform2f(u.uDoc, doc.w, doc.h);
   gl.uniform1f(u.uVol, P.vol);
-  const metal = L.brush === 'metal', stone = L.brush === 'stone';
+  const metal = L.brush === 'metal', stone = L.brush === 'stone', clay = L.brush === 'clay', scene = doc.light.shadows;
   gl.uniform1f(u.uSky, P.sky ?? .3); gl.uniform1f(u.uRim, P.rim ?? .85);
-  const Ld = lightDir(P.light, metal ? .44 : stone ? .6 : .66); gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
-  gl.uniform1i(u.uBrush, metal ? 1 : stone ? 2 : 0);
+  // clay is lit by the scene's light; the others keep the height their material was tuned for, and turn
+  // with the scene's light once it casts shadows
+  const Ld = clay ? lightOf().dir : lightDir(scene ? doc.light.angle : P.light, metal ? .44 : stone ? .6 : .66);
+  gl.uniform3f(u.uL, Ld[0], Ld[1], Ld[2]);
+  gl.uniform1i(u.uBrush, metal ? 1 : stone ? 2 : clay ? 3 : 0);
   gl.uniform1f(u.uPits, stone ? P.pits : 0); gl.uniform1f(u.uFacets, stone ? P.facets : 0);
   gl.uniform1f(u.uDScale, P.scale ?? 1); gl.uniform1f(u.uRelief, P.relief ?? 1);
   const c0 = lin(hexRgb(metal ? P.c0 : P.color)), c1 = metal ? lin(hexRgb(P.c1)) : [0, 0, 0], c2 = metal ? lin(hexRgb(P.c2)) : [0, 0, 0];
@@ -65,11 +72,13 @@ function layerUniforms(u, L, tex, tw, th) {
   gl.uniform1f(u.uGloss, P.gloss ?? 0); gl.uniform1f(u.uShine, P.shine ?? 1); gl.uniform1f(u.uBreak, P.brk ?? 0);
   gl.uniform1f(u.uSpeckle, P.speckle ?? 0); gl.uniform1f(u.uGrain, (stone ? P.grit : P.grain) ?? 0); gl.uniform1f(u.uRough, P.rough ?? 0);
   gl.uniform1f(u.uContrast, P.contrast ?? 1); gl.uniform1f(u.uIri, P.iri ?? 0);
-  gl.uniform1f(u.uShadow, P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
-  gl.uniform1f(u.uSeed, L.seed || 0);
+  gl.uniform1f(u.uShadow, scene ? 0 : P.shadow); gl.uniform1f(u.uShadowDist, (P.size * .24 + 3) * P.vol);
+  gl.uniform1f(u.uSeed, L.seed || 0); gl.uniform1f(u.uGlow, P.glow ?? 0);
+  sceneUniforms(u, L);
   return Ld;
 }
 function compositeScreen() {
+  SCN = { S: SC, mode: updateScene() ? 1 : 0, li: lightOf() };
   drawBg(null, false);
   for (const L of doc.layers) {
     if (!L.visible) continue;

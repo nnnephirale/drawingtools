@@ -6,6 +6,7 @@ const dirty = new Set();
 let needsDraw = true;
 
 function drawStamps(target, buf, minSig) {
+  fieldGen++;
   if (!buf.n) return;
   gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb);
   gl.viewport(0, 0, target.w, target.h);
@@ -26,10 +27,12 @@ function copyInto(src, dst) {
   fullscreen(PR.copy, dst, u => { bindTex(0, src.tex); gl.uniform1i(u.uSrc, 0); });
 }
 function eraseInto(src, eTarget, dst) {
+  fieldGen++;
   gl.disable(gl.BLEND);
   fullscreen(PR.erase, dst, u => { bindTex(0, src.tex); bindTex(1, eTarget.tex); gl.uniform1i(u.uSrc, 0); gl.uniform1i(u.uE, 1); gl.uniform1f(u.uInv, 1 / FIELD.scale); });
 }
 function addInto(src, dst) {
+  fieldGen++;
   gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE);
   fullscreen(PR.copy, dst, u => { bindTex(0, src.tex); gl.uniform1i(u.uSrc, 0); });
   gl.disable(gl.BLEND);

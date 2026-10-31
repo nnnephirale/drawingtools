@@ -17,7 +17,7 @@ function synth(path, { dur = 1600, speed = () => 1, pressure = () => .5, N = 700
   return { id: uid(), seed: Math.random() * 1000, sym: 'off', erase: false, hasP: true, hasT: false, pts };
 }
 function seedDemo() {
-  doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, layers: [], active: null };
+  doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, light: { ...LIGHT_OLD }, layers: [], active: null };
   const slip = newLayer('slip');
   slip.strokes.push(synth(u => {
     const a = u * Math.PI * 2 * 3.3;

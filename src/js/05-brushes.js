@@ -32,6 +32,16 @@ const STONE_PRESETS = [
   { name: 'Basalt',    color: '#3C3B3A', pits: .26, facets: .65, grit: .85, scale: 1.1, relief: 1.18, gloss: .05, shine: 1.06 },
   { name: 'Meteorite', color: '#2A2725', pits: .7,  facets: .35, grit: .3,  scale: 1.2, relief: 1,   gloss: .6,  shine: 1 },
 ];
+// modelling clay after the plasticine reliefs: one colour, matte to waxy, lit by the board's light
+const CLAY_PRESETS = [
+  { name: 'Coral',      color: '#C9452F', gloss: .35, grain: .3,  glow: .6 },
+  { name: 'Bone',       color: '#E6E1D6', gloss: .3,  grain: .25, glow: .35 },
+  { name: 'Ochre',      color: '#D49A3E', gloss: .5,  grain: .25, glow: .55 },
+  { name: 'Periwinkle', color: '#94A8DB', gloss: .25, grain: .2,  glow: .3 },
+  { name: 'Cocoa',      color: '#6B3B27', gloss: .55, grain: .3,  glow: .3 },
+  { name: 'Iris',       color: '#4A4DA6', gloss: .4,  grain: .25, glow: .4 },
+  { name: 'Moss',       color: '#7D8D4B', gloss: .3,  grain: .35, glow: .4 },
+];
 const DEF = {
   slip: {
     size: 37, pressure: .84, speed: .15, tilt: .33, vary: .31, merge: .28, pool: .54, smooth: .92, end: 'drop', taper: 1.2,
@@ -47,13 +57,22 @@ const DEF = {
     color: '#8E8B86', pits: .85, facets: 0, grit: .75, scale: 1, relief: 1, gloss: .06, shine: .6,
     vol: 1.75, edge: 11, light: 120, shadow: 0, preset: 'Comet Pit',
   },
+  // Edge past any radius keeps every stroke round all the way over: a rolled snake of clay, never a puddle
+  clay: {
+    size: 30, pressure: .7, speed: .1, tilt: .2, vary: .22, merge: .18, pool: .3, smooth: .92, end: 'drop', taper: 1.2,
+    color: '#C9452F', gloss: .35, shine: 1, grain: .3, glow: .6, vol: 1, edge: 160, light: 135, shadow: 0, preset: 'Coral',
+  },
 };
 const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
-const BRUSHES = ['slip', 'metal', 'stone'];
-const TOOLS = ['slip', 'stone'];      // brushes offered in the pill; Metal is retired until a better one, but old Metal layers still render
-const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone' };
-const PRESETS = { slip: SLIP_PRESETS, metal: METAL_PRESETS, stone: STONE_PRESETS };
-const BGS = [['Paper', '#F4F2EE'], ['Stone', '#E2DFD8'], ['Sand', '#CDBFAD'], ['Slate', '#6F747B'], ['Ink', '#161616'], ['Clear', 'none']];
+const BRUSHES = ['slip', 'metal', 'stone', 'clay'];
+const TOOLS = ['slip', 'stone', 'clay'];      // brushes offered in the pill; Metal is retired until a better one, but old Metal layers still render
+const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone', clay: 'Clay' };
+const PRESETS = { slip: SLIP_PRESETS, metal: METAL_PRESETS, stone: STONE_PRESETS, clay: CLAY_PRESETS };
+const BGS = [['Paper', '#F4F2EE'], ['Stone', '#E2DFD8'], ['Sand', '#CDBFAD'], ['Sage', '#7F9A7E'], ['Slate', '#6F747B'], ['Ink', '#161616'], ['Clear', 'none']];
+/* The board's light (see 32-scene-light.js), kept with the drawing. New drawings get real shadows on paper;
+   drawings from before scene light keep the look they were made with until it's turned on. */
+const LIGHT_DEF = { shadows: true, angle: 135, height: 38, soft: .45, fill: .32, shade: 1, paper: 'paper' };
+const LIGHT_OLD = { ...LIGHT_DEF, shadows: false, paper: 'plain' };
 const BOARDS = [['4:3', 1600, 1200], ['1:1', 1400, 1400], ['3:4', 1200, 1600], ['16:9', 1920, 1080], ['9:16', 1080, 1920]];
 const mergeA = m => lerp(4.5, 1.32, clamp(m, 0, 1));    // field peak / threshold. Lower peak = longer tails = more fusing
 const ERASE_A = 2.2;

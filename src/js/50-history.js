@@ -3,7 +3,7 @@
    ════════════════════════════════════════════════════════════════════ */
 const hist = { undo: [], redo: [] };
 const cloneLayers = ls => ls.map(L => ({ ...L, params: { ...L.params }, strokes: L.strokes.slice(), ops: (L.ops || []).map(o => ({ ...o })) }));
-const snapshot = () => ({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: doc.bgImage, active: doc.active, layers: cloneLayers(doc.layers) });
+const snapshot = () => ({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: doc.bgImage, light: { ...doc.light }, active: doc.active, layers: cloneLayers(doc.layers) });
 function commit(snap) {
   hist.undo.push(snap); if (hist.undo.length > 150) hist.undo.shift();
   hist.redo.length = 0; updUndo(); docDirty = true; save();
@@ -16,7 +16,7 @@ const beginEditDoc = beginEdit, endEditDoc = endEdit;
 function restore(s) {
   dropSel();
   const sized = s.w !== doc.w || s.h !== doc.h;
-  doc = { w: s.w, h: s.h, bg: s.bg, bgImage: s.bgImage, active: s.active, layers: cloneLayers(s.layers) };
+  doc = withLight({ w: s.w, h: s.h, bg: s.bg, bgImage: s.bgImage, light: s.light, active: s.active, layers: cloneLayers(s.layers) });
   gcTargets();
   for (const L of doc.layers) dirty.add(L.id);
   if (sized) { view.z = 1; fit(); updateResolution(); }
@@ -82,12 +82,12 @@ async function docRecord(d, id) {
   const layers = d.layers.map(L => ({ id: L.id, brush: L.brush, name: L.name, visible: L.visible, seed: L.seed, params: { ...L.params },
     strokes: L.strokes.map(s => ({ ...s, pts: packPts(s.pts) })),
     ops: (L.ops || []).map(o => ({ ...o, poly: o.poly && o.poly.map(r1), dx: r1(o.dx || 0), dy: r1(o.dy || 0) })) }));
-  return { id, v: SESSION_V, renderer: RENDERER, w: d.w, h: d.h, bg: d.bg, active: d.active, layers,
+  return { id, v: SESSION_V, renderer: RENDERER, w: d.w, h: d.h, bg: d.bg, light: d.light, active: d.active, layers,
     bgImage: d.bgImage ? await canvasBlob(d.bgImage) : null };
 }
 async function docFromRecord(r) {
-  const d = { w: r.w, h: r.h, bg: r.bg, active: r.active, bgImage: r.bgImage ? await blobCanvas(r.bgImage).catch(() => null) : null,
-    layers: (r.layers || []).map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) };
+  const d = withLight({ w: r.w, h: r.h, bg: r.bg, light: r.light, active: r.active, bgImage: r.bgImage ? await blobCanvas(r.bgImage).catch(() => null) : null,
+    layers: (r.layers || []).map(L => ({ ...L, params: { ...DEF[L.brush], ...L.params } })) });
   if (!d.layers.some(L => L.id === d.active)) d.active = d.layers.length ? d.layers[d.layers.length - 1].id : null;
   return d;
 }
@@ -106,7 +106,7 @@ function savePrefs() {
   if (isLab || !prefsReady) return;
   try {
     localStorage.setItem(KEY, JSON.stringify({ v: 2, cur: session ? session.id : null, last: lastParams,
-      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, canvas3d: ui.canvas3d, selAll: ui.selAll, snap: ui.snap, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
+      ui: { tool: ui.tool === 'view' ? ui.brush : ui.tool, brush: ui.brush, depth: ui.depth, canvas3d: ui.canvas3d, selAll: ui.selAll, snap: ui.snap, previewShadows: ui.previewShadows, sym: ui.sym, eraser: ui.eraser, tab: ui.tab, exp: ui.exp, panel: !panel.hasAttribute('hidden-state') } }));
   } catch (e) {}
 }
 function save() {
@@ -148,7 +148,7 @@ async function flush() {
   if (thumbT) await saveThumb();
 }
 function setDocument(d) {
-  doc = d;
+  doc = withLight(d);
   hist.undo.length = 0; hist.redo.length = 0; updUndo();
   gcTargets();
   for (const L of doc.layers) dirty.add(L.id);
@@ -177,7 +177,7 @@ async function startSession(d, name) {
 }
 const newSession = () => guarded(async () => {
   await flush();
-  await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, layers: [], active: null });
+  await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, light: { ...LIGHT_DEF }, layers: [], active: null });
   toast(`${session.name} started`);
 });
 const deleteSession = id => guarded(async () => {
@@ -190,7 +190,7 @@ const deleteSession = id => guarded(async () => {
   if (session && session.id === id) {
     session = null;
     if (sessions.length) { const next = sessions[0]; session = next; setDocument(await docFromRecord(await DB.get('docs', next.id))); savePrefs(); }
-    else await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, layers: [], active: null });
+    else await startSession({ w: doc.w, h: doc.h, bg: doc.bg, bgImage: null, light: { ...LIGHT_DEF }, layers: [], active: null });
   }
   renderSessions();
   toast(`${meta.name} deleted`, { label: 'Undo', fn: async () => {
