@@ -46,6 +46,7 @@ function hUniforms(u, L, tex) {
   gl.uniform1f(u.uInv, 1 / FIELD.scale); gl.uniform2f(u.uDoc, doc.w, doc.h);
   gl.uniform1f(u.uA, mergeA(P.merge));
   gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, L.brush === 'metal' ? 0 : L.brush === 'stone' ? .3 : .5);
+  gl.uniform1f(u.uPipe, L.brush === 'clay' ? P.pipe ?? 1.2 : 0);
 }
 function drawLayer(L, tex, target, tw, th) {
   gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);

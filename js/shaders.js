@@ -186,19 +186,25 @@ void main(){
 const GL_H = `
 precision highp sampler2D;
 uniform sampler2D uField;
-uniform float uInv, uA, uBevel, uBulge;
+uniform float uInv, uA, uBevel, uBulge, uPipe;
 uniform vec2 uDoc;
 // x = summed density R, y = the local radius (doc px)
 vec2 F(vec2 uv){ vec4 t = texture(uField, uv); return vec2(t.r * uInv, t.b / max(t.g, 1e-7) * 64.); }
 float lnA;
 // 0 at the silhouette, 1 on the ridge of a lone line (exact for a straight gaussian ridge)
 float innerE(float R){ return R >= uA ? 1. : 1. - sqrt(max(log(uA / R) / lnA, 0.)); }
+/* Piping (clay): where material piles up (density past a lone bead's peak, as at a held pen), the bead's own
+   curve carries on into a taller rounded dome, like icing from a bag. Its slope where it starts matches the
+   bead's, (rad / 2 lnA) per unit of over, so there's no crease, and it eases towards uPipe radii more, so
+   there's no flat top. The other materials cap at the bead and spread as a puddle instead. */
+float dome(float over, float B){ return B * uPipe * (1. - exp(-over / (2. * lnA * uPipe))); }
 float H(vec2 uv){
   vec2 f = F(uv);
   if (f.x <= 1.) return 0.;
   float rad = f.y;
   float over = max(f.x / uA - 1., 0.);
   float B = max(min(rad, uBevel), .5);
+  if (uPipe > 0.) { float t = min(innerE(f.x) * rad / B, 1.); return B * sqrt(1. - (1. - t) * (1. - t)) + dome(over, B); }
   float d = innerE(f.x) * rad + over * rad * .6;
   float t = min(d / B, 1.);
   return B * sqrt(1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3;
@@ -215,8 +221,10 @@ float Hg(vec2 uv){
   float rad = f.y;
   float over = max(f.x / uA - 1., 0.);
   float B = max(min(rad, uBevel), .5);
-  float t = clamp((innerE(f.x) * rad + over * rad * .6) / B, -1., 1.);
   float te = edgeT(uv);
+  if (uPipe > 0.) { float t = clamp(innerE(f.x) * rad / B, -1., 1.);
+    return min(B * (t < 0. ? 2. * t : 1. - (1. - t) * (1. - t)) + dome(over, B), uBevel * (1. - (1. - te) * (1. - te))); }
+  float t = clamp((innerE(f.x) * rad + over * rad * .6) / B, -1., 1.);
   return min(B * (t < 0. ? 2. * t : 1. - (1. - t) * (1. - t)) + uBulge * rad * min(over, 1.2) * .3, uBevel * (1. - (1. - te) * (1. - te)));
 }
 // the bevel, also closed off at the board's edge (for the 3D view's shading)
@@ -266,7 +274,7 @@ ${mesh ? '#define MESH' : ''}
 in vec2 vUv;
 #ifdef MESH
 in vec3 vP;
-uniform vec3 uCam; uniform int uPass; uniform mat3 uRot; uniform float uSide, uDepth;
+uniform vec3 uCam; uniform int uPass; uniform mat3 uRot; uniform float uSide, uDepth, uRound, uCell;
 // textures are sampled at the surface's 3D position (TX), and every direction is turned into the room (OW)
 #define TX vec3
 #define OW(v) (uRot * (v))
@@ -542,7 +550,10 @@ void main(){
 #ifndef MESH
   a *= inDoc; shA *= inDoc;
 #endif
-  ${mesh ? 'if (uPass == 0) { if (a < .5) discard; o = vec4(0.); return; }' : ''}
+  // off the canvas the outline is the snapped mesh's own edge (antialiased by MSAA). A soft cut there would
+  // leave a seam of pinholes where the halves meet, and where the outline curves the mesh's straight edges
+  // between snapped vertices run a little past it: cut only beyond a third of a grid cell
+  ${mesh ? 'if (uRound > 0.) { if (R < .3 || innerE(R) * c.y < -uCell * .3) discard; a = 1.; } if (uPass == 0) { if (a < .5) discard; o = vec4(0.); return; }' : ''}
   if (a <= 0. && shA < .002) { o = vec4(0.); return; }
 
   vec3 col = vec3(0.);
@@ -559,6 +570,11 @@ void main(){
     float k3 = uVol * uDepth;
     float cl = Hc(uv - vec2(t.x, 0.)), cr = Hc(uv + vec2(t.x, 0.)), cu = Hc(uv + vec2(0., t.y)), cd = Hc(uv - vec2(0., t.y));
     N0 = OW(normalize(vec3(-(cr - cl) / tDoc * k3, -(cd - cu) / tDoc * k3, uSide)));
+    // off the canvas, the sliver just past the outline (see the cut above) is the side, facing out, not up
+    if (uRound > 0. && R < 1.) {
+      float rl = F(uv - vec2(t.x, 0.)).x, rr = F(uv + vec2(t.x, 0.)).x, ru = F(uv + vec2(0., t.y)).x, rd = F(uv - vec2(0., t.y)).x;
+      N0 = OW(normalize(vec3(-(rr - rl), -(rd - ru), 1e-4)));
+    }
 #endif
 #ifndef MESH
     // laid over other layers, it drapes (see FS_SCENE): tilt it by the slope of what it stands on, so it turns
@@ -739,14 +755,42 @@ uniform sampler2D uStack;
 uniform int uHasStack;
 uniform mat4 uMVP;
 uniform float uVol, uDepth, uLift, uSide;
+uniform float uRound, uCell;      // off the canvas: round sides (see below), and the grid's spacing in doc px
 out vec2 vUv; out vec3 vP;
+/* Off the canvas each stroke is two mirrored halves, so its side is where they meet. With Hg's gentle wall they
+   met at an angle (a pointed, lens-shaped side). Here the grid vertex nearest each outline is moved onto it, at
+   height zero, so the halves can use the same round profile as the shading and meet vertically: a round side.
+   Snapping is also what keeps the steep wall from cutting a sawtooth outline across the grid cells. */
+float Hm(vec2 uv){
+  vec2 f = F(uv);
+  if (f.x <= .02) return -2. * uBevel;
+  float rad = f.y, over = max(f.x / uA - 1., 0.);
+  float B = max(min(rad, uBevel), .5);
+  float t = clamp((innerE(f.x) * rad + (uPipe > 0. ? 0. : over * rad * .6)) / B, -1., 1.);
+  float h = t < 0. ? 2. * B * t : B * sqrt(1. - (1. - t) * (1. - t));
+  h += uPipe > 0. ? dome(over, B) : uBulge * rad * min(over, 1.2) * .3;
+  float te = edgeT(uv);
+  return min(h, uBevel * sqrt(1. - (1. - te) * (1. - te)));
+}
 void main(){
   lnA = log(uA);
-  vUv = aUv;
-  float z = Hg(aUv) * uVol * uDepth + uLift;
-  if (uHasStack == 1) z += texture(uStack, aUv).r;
+  vec2 uv = aUv;
+  float h;
+  if (uRound > 0.) {
+    vec2 f = F(uv);
+    float sd = f.x > .02 ? innerE(f.x) * f.y : -1e4;     // signed distance to the outline, doc px, inside +
+    h = max(Hm(uv), 0.);      // outside lies flat on the seam: sloping away, its slivers poke through the other half
+    if (abs(sd) < uCell * .55) {
+      vec2 e = vec2(.5 * uCell) / uDoc;
+      vec2 g = vec2(F(uv + vec2(e.x, 0.)).x - F(uv - vec2(e.x, 0.)).x, F(uv + vec2(0., e.y)).x - F(uv - vec2(0., e.y)).x) / (e * uDoc);
+      if (dot(g, g) > 1e-12) { uv = clamp(uv - normalize(g) * sd / uDoc, 0., 1.); h = 0.; }
+    }
+  } else h = Hg(uv);
+  vUv = uv;
+  float z = h * uVol * uDepth + uLift;
+  if (uHasStack == 1) z += texture(uStack, uv).r;
   z *= uSide;
-  vP = vec3(aUv.x * uDoc.x, (1. - aUv.y) * uDoc.y, z);
+  vP = vec3(uv.x * uDoc.x, (1. - uv.y) * uDoc.y, z);
   gl_Position = uMVP * vec4(vP, 1.);
 }`;
 // one layer's height × uK: raw into a float target (the stack), or packed into 16 bits of RGBA8 for reading back

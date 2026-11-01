@@ -242,7 +242,7 @@ function loadPrefs() {
   if (d.v === 1) for (const b of BRUSHES) for (const k of GEOM) if (k !== 'taper') lastParams[b][k] = DEF[b][k];
   if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
   if (!TOOLS.includes(ui.brush)) ui.brush = 'stone';
-  ui.depth = clamp(+ui.depth || 3, 1, 3);
+  ui.depth = clamp(+ui.depth || 1, .3, 1.2);
   if (ui.tool !== 'erase' && !TOOLS.includes(ui.tool)) ui.tool = ui.brush;
   if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
   // v1 kept the one drawing in localStorage; it becomes the first session

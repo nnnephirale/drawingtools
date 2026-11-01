@@ -2,7 +2,7 @@
    state
    ════════════════════════════════════════════════════════════════════ */
 let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, light: { ...LIGHT_OLD }, layers: [], active: null };
-const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 3, canvas3d: true, selAll: true, snap: true, previewShadows: true, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
+const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 1, canvas3d: true, selAll: true, snap: true, previewShadows: true, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
 const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal }, stone: { ...DEF.stone }, clay: { ...DEF.clay } };
 const activeLayer = () => doc.layers.find(L => L.id === doc.active) || null;
 const layerById = id => doc.layers.find(L => L.id === id);

@@ -161,3 +161,30 @@ From her iPad photo and notes:
   its contact points sit close together and can trade places, which reads as a 180° twist. Broad contacts (over
   90 px) are now ignored from the start; a twist is read only from exactly two fingers at least 110 px apart, and a
   jump of more than ~25° between two events is dropped. Contacts closer than 60 px don't pinch either.
+
+## Round 14: piping (1 Nov 2026)
+Her words: "pressing for a long while creates a flattened appearance at that spot. I want it to feel like cake
+piping: pressing for longer just adds to the rounded bulbous feeling, not terraced flattened ridges."
+- **Why it went flat:** where material piled up past a lone bead's peak (a held pen's pool on top of the line),
+  the height clamped at the bead's radius (a flat top), and the bulge on top stopped at a second limit (a crease
+  ring). The hand's drift while holding also kept starting new, smaller pools beside the first, so the flats
+  stacked into terraces.
+- **Clay pipes now** (`dome()` in shaders.js): past the bead's peak, its curve carries on into a taller rounded
+  dome whose slope where it starts matches the bead's, so there's no crease, and which eases towards more height
+  rather than stopping, so there's no flat. While the pen is held, the pool keeps getting material: it swells
+  wider (radius growth that slows but doesn't stop, over ~8 s) and taller. Drift within 40% of the brush radius
+  keeps feeding the same pool. Measured across a 3 s hold: `35 43 50 52 50 43 35` where it was `33 40 42 42 42 40 33`.
+- **Bulge** (Surface → Form, clay only) sets how far material can pile up; 0 gives back the old flat puddle.
+  Clay's default Pooling went from .3 to .8 so a hold shows. Slip, stone and metal are unchanged.
+
+## Round 15: depth and round sides in 3D (1 Nov 2026)
+- **Depth** now runs 0.3× to 1.2× and starts at 1× (her preference), where it ran 1× to 3×. Saved depths
+  above 1.2 come back as 1.2.
+- **Pointed sides off the canvas.** With the canvas off each stroke is two mirrored halves. The mesh used a
+  gentler wall than the shading (to keep a steep wall from cutting a sawtooth outline across the grid), so the
+  halves met at an angle: a lens-shaped, pointed side. Now the grid vertex nearest each outline is moved onto it
+  at height zero (along the field's gradient), and the halves use the same round profile as the shading, so
+  they meet vertically. Vertices outside lie flat on the seam, the cut follows the snapped mesh (with a third
+  of a cell of slack, since its straight edges run a little past a curving outline), and that sliver is shaded
+  as the side. On the canvas nothing changed. Left: a faint stitched seam where the outline curves tightest
+  (stroke ends), and a slight grid-scale waver when zoomed far in.

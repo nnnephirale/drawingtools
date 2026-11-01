@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Built from src/ by dev/build.mjs (edit src/, then run: node dev/build.mjs) · sha256 70e6fa7a39e6ddae -->
+<!-- Built from src/ by dev/build.mjs (edit src/, then run: node dev/build.mjs) · sha256 1cfe5c48bf6fd62f -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -644,11 +644,11 @@ const DEF = {
   },
   // Edge past any radius keeps every stroke round all the way over: a rolled snake of clay, never a puddle
   clay: {
-    size: 30, pressure: .7, speed: .1, tilt: .2, vary: .22, merge: .18, pool: .3, smooth: .92, end: 'drop', taper: 1.2,
-    color: '#C9452F', gloss: .35, shine: 1, grain: .3, glow: .6, vol: 1, edge: 160, light: 135, shadow: 0, preset: 'Coral',
+    size: 30, pressure: .7, speed: .1, tilt: .2, vary: .22, merge: .18, pool: .8, smooth: .92, end: 'drop', taper: 1.2,
+    color: '#C9452F', gloss: .35, shine: 1, grain: .3, glow: .6, vol: 1, edge: 160, pipe: 1.2, light: 135, shadow: 0, preset: 'Coral',
   },
 };
-const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
+const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper', 'pipe']);
 const BRUSHES = ['slip', 'metal', 'stone', 'clay'];
 const TOOLS = ['slip', 'stone', 'clay'];      // brushes offered in the pill; Metal is retired until a better one, but old Metal layers still render
 const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone', clay: 'Clay' };
@@ -666,7 +666,7 @@ const ERASE_A = 2.2;
    state
    ════════════════════════════════════════════════════════════════════ */
 let doc = { w: 1600, h: 1200, bg: '#E2DFD8', bgImage: null, light: { ...LIGHT_OLD }, layers: [], active: null };
-const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 3, canvas3d: true, selAll: true, snap: true, previewShadows: true, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
+const ui = { tool: 'slip', brush: 'slip', sym: 'off', eraser: 44, depth: 1, canvas3d: true, selAll: true, snap: true, previewShadows: true, tab: 'brush', exp: { scale: 2, transparent: true, crop: true } };
 const lastParams = { slip: { ...DEF.slip }, metal: { ...DEF.metal }, stone: { ...DEF.stone }, clay: { ...DEF.clay } };
 const activeLayer = () => doc.layers.find(L => L.id === doc.active) || null;
 const layerById = id => doc.layers.find(L => L.id === id);
@@ -811,6 +811,7 @@ function strokeStamps(st, P, out, W, H, minSig) {
   const base = (erase ? st.size : P.size) * .5;
   const prI = erase ? .5 : P.pressure, spI = erase ? 0 : P.speed, tiI = erase ? 0 : P.tilt;
   const smoothK = st.shape ? 0 : erase ? .15 : P.smooth, poolK = erase ? 0 : P.pool, vary = erase ? 0 : P.vary;
+  const pipe = erase ? 0 : P.pipe || 0;          // clay: a held pen keeps piping material out (see dome() in shaders.js)
   const end = erase ? 'none' : P.end;
   const vref = 1.1 * W / 1600;
   const emit = emitter(out, st.sym, W, H);
@@ -821,7 +822,8 @@ function strokeStamps(st, P, out, W, H, minSig) {
   const a = 1 - smoothK * .86;
   const X = [], Y = [], Rr = [], pools = [];
   let sx = pts[0], sy = pts[1], vs = 0, rs = -1;
-  let ax = pts[0], ay = pts[1], at = pts[3], poolR = 0, poolX = 0, poolY = 0;
+  let ax = pts[0], ay = pts[1], at = pts[3], poolR = 0, poolW = 1, poolX = 0, poolY = 0;
+  const still = Math.max(2, base * (pipe ? .4 : .15));   // piping: the hand's drift keeps feeding one pool, not a row of them
   for (let i = 0; i < n; i++) {
     const o = i * 5, x = pts[o], y = pts[o + 1], p = pts[o + 2], t = pts[o + 3], al = pts[o + 4];
     if (i) {
@@ -836,14 +838,17 @@ function strokeStamps(st, P, out, W, H, minSig) {
     const r = base * pf * sf * tf;
     rs = rs < 0 ? r : rs + (r - rs) * .35;
     if (Math.hypot(x - ax, y - ay) > Math.max(2, base * .15)) {
-      if (poolR) { pools.push(poolX, poolY, poolR); poolR = 0; }
+      if (poolR) { pools.push(poolX, poolY, poolR, poolW); poolR = 0; }
       ax = x; ay = y; at = t;
     } else if (poolK > 0 && t - at > 90) {
-      poolR = rs * (1 + poolK * .9 * (1 - Math.exp(-(t - at - 90) / 650))); poolX = ax; poolY = ay;
+      const g = 1 - Math.exp(-(t - at - 90) / 650), held = Math.min((t - at - 90) / 1000, 8);
+      // piped material keeps coming while the pen is held: the bead swells wider and taller, slowing but not stopping
+      poolR = rs * (1 + poolK * .9 * g + pipe * poolK * .3 * Math.pow(held, .7)); poolX = ax; poolY = ay;
+      poolW = 1 + pipe * poolK * (2.2 * g + .5 * held);
     }
     X.push(sx); Y.push(sy); Rr.push(rs);
   }
-  if (poolR) pools.push(poolX, poolY, poolR);
+  if (poolR) pools.push(poolX, poolY, poolR, poolW);
   if (n > 1 && a < 1) {
     const lx = pts[(n - 1) * 5], ly = pts[(n - 1) * 5 + 1];
     for (let k = 0; k < 40 && Math.hypot(lx - sx, ly - sy) > .3; k++) { sx += (lx - sx) * a; sy += (ly - sy) * a; X.push(sx); Y.push(sy); Rr.push(rs); }
@@ -901,7 +906,7 @@ function strokeStamps(st, P, out, W, H, minSig) {
     dot(DX[0], DY[0], DR[0] * 1.04, .55);
     dot(DX[k - 1], DY[k - 1], DR[k - 1] * 1.06, .6);
   }
-  for (let i = 0; i < pools.length; i += 3) dot(pools[i], pools[i + 1], pools[i + 2], 1);
+  for (let i = 0; i < pools.length; i += 4) dot(pools[i], pools[i + 1], pools[i + 2], pools[i + 3]);
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1156,6 +1161,7 @@ function hUniforms(u, L, tex) {
   gl.uniform1f(u.uInv, 1 / FIELD.scale); gl.uniform2f(u.uDoc, doc.w, doc.h);
   gl.uniform1f(u.uA, mergeA(P.merge));
   gl.uniform1f(u.uBevel, P.edge ?? 40); gl.uniform1f(u.uBulge, L.brush === 'metal' ? 0 : L.brush === 'stone' ? .3 : .5);
+  gl.uniform1f(u.uPipe, L.brush === 'clay' ? P.pipe ?? 1.2 : 0);
 }
 function drawLayer(L, tex, target, tw, th) {
   gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -1300,7 +1306,7 @@ function sceneEnd(S, layers, li, steps) {
   gl.bindTexture(gl.TEXTURE_2D, null);
   // how far a shadow can fall: the tallest likely stack over the tangent of the light's height
   let hmax = 0;
-  for (const L of layers) { const P = L.params; hmax = Math.max(hmax, Math.min(P.size * .85 * (1 + P.pool * .6), (P.edge ?? 40) * 1.5) * P.vol * (L.brush === 'clay' ? 2 : 1)); }
+  for (const L of layers) { const P = L.params; hmax = Math.max(hmax, Math.min(P.size * .85 * (1 + P.pool * .6), (P.edge ?? 40) * 1.5) * P.vol * (L.brush === 'clay' ? 2 + (P.pipe ?? 0) * .8 : 1)); }
   S.reach = clamp(hmax * 1.4 / Math.tan(li.Lt.height * Math.PI / 180), 24, 900); S.steps = steps;
   fullscreen(PR.light, S.lb, u => { gl.uniform2f(u.uDoc, doc.w, doc.h); marchUniforms(u, S, li, 6); });
 }
@@ -1517,6 +1523,7 @@ function render3D(out, scale = 1) {
   gl.uniform3f(u.uCam, ...cam.eye);
   gl.uniformMatrix4fv(u.uMVP, false, cam.mvp);
   gl.uniform1f(u.uDepth, ui.depth);
+  gl.uniform1f(u.uRound, ui.canvas3d ? 0 : 1); gl.uniform1f(u.uCell, doc.w / g.nx);
   gl.bindVertexArray(g.vao);
   for (const pass of [0, 1]) {
     gl.uniform1i(u.uPass, pass);
@@ -2119,7 +2126,7 @@ function loadPrefs() {
   if (d.v === 1) for (const b of BRUSHES) for (const k of GEOM) if (k !== 'taper') lastParams[b][k] = DEF[b][k];
   if (d.ui) Object.assign(ui, d.ui, { exp: { ...ui.exp, ...(d.ui.exp || {}) } });
   if (!TOOLS.includes(ui.brush)) ui.brush = 'stone';
-  ui.depth = clamp(+ui.depth || 3, 1, 3);
+  ui.depth = clamp(+ui.depth || 1, .3, 1.2);
   if (ui.tool !== 'erase' && !TOOLS.includes(ui.tool)) ui.tool = ui.brush;
   if (d.ui && d.ui.panel === false) panel.setAttribute('hidden-state', '');
   // v1 kept the one drawing in localStorage; it becomes the first session
@@ -2909,7 +2916,8 @@ function renderPanel() {
       sec('Finish'),
       ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01], ['brk', 'Break', 0, 1, .01], ['speckle', 'Speckle', 0, 1, .01], ['grain', 'Grain', 0, 1, .01]].map(ps));
   }
-  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, brush === 'clay' ? 160 : 80, 1]].map(ps), sec('Light'));
+  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, brush === 'clay' ? 160 : 80, 1]].map(ps),
+    ...(brush === 'clay' ? [ps(['pipe', 'Bulge', 0, 2.5, .01])] : []), sec('Light'));
   if (brush === 'clay' || doc.light.shadows) sp.append(hint(`Lit by the board's light, set in <b>Canvas → Light</b>${brush === 'clay' ? '' : ' while shadows are on'}.`));
   else sp.append(...[['light', 'Light', 0, 360, 1, '°'], ['shadow', 'Shadow', 0, 1, .01]].map(ps));
   markPresets();
@@ -3504,7 +3512,7 @@ async function exportModel(kind) {
 }
 function viewControls() {
   return [sec('3D view'),
-    slider({ label: 'Depth', min: 1, max: 3, step: .05, suf: '×', hist: false, get: () => ui.depth, set: v => { ui.depth = v; request(); save(); } }),
+    slider({ label: 'Depth', min: .3, max: 1.2, step: .05, suf: '×', hist: false, get: () => ui.depth, set: v => { ui.depth = v; request(); save(); } }),
     hint('Turn Canvas off (just above 3D) and each stroke becomes a whole object with an underside, so you can turn it right round. Depth 1× keeps ropes round.'),
     hint(isTouchUI
       ? 'Drag to turn the drawing, all the way round if you like. Pinch to zoom, two fingers to move it. Fit returns to the starting angle.'
@@ -3601,7 +3609,7 @@ boot();
 addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
 addEventListener('pagehide', () => saveNow());
 window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, export3DPNG, exportModel, T, view, applyView, zoomToPct, dirty, renderPanel, three, animate3D, heightGrid, render3D,
-  closeup, placeCanvas, sel, selectAll, deleteSel, dropSel, screenToDoc, SC, lightOf, renderCanvas, compositeScreen,
+  closeup, placeCanvas, sel, selectAll, deleteSel, dropSel, screenToDoc, SC, lightOf, renderCanvas, compositeScreen, frame,
   stamps(st, P) { const b = new FBuf(); strokeStamps(st, P, b, doc.w, doc.h, .5); return Array.from(b.a.subarray(0, b.n)); },
   setDoc(d) { doc = withLight(d); gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); },
   demo() { seedDemo(); this.setDoc(doc); } };

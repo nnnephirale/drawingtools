@@ -43,7 +43,7 @@ boot();
 addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
 addEventListener('pagehide', () => saveNow());
 window.__sm = { doc: () => doc, ui, request, setTool, exportPNG, export3DPNG, exportModel, T, view, applyView, zoomToPct, dirty, renderPanel, three, animate3D, heightGrid, render3D,
-  closeup, placeCanvas, sel, selectAll, deleteSel, dropSel, screenToDoc, SC, lightOf, renderCanvas, compositeScreen,
+  closeup, placeCanvas, sel, selectAll, deleteSel, dropSel, screenToDoc, SC, lightOf, renderCanvas, compositeScreen, frame,
   stamps(st, P) { const b = new FBuf(); strokeStamps(st, P, b, doc.w, doc.h, .5); return Array.from(b.a.subarray(0, b.n)); },
   setDoc(d) { doc = withLight(d); gcTargets(); for (const L of doc.layers) dirty.add(L.id); view.z = 1; fit(); updateResolution(); afterChange(); },
   demo() { seedDemo(); this.setDoc(doc); } };

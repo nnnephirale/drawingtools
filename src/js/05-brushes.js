@@ -59,11 +59,11 @@ const DEF = {
   },
   // Edge past any radius keeps every stroke round all the way over: a rolled snake of clay, never a puddle
   clay: {
-    size: 30, pressure: .7, speed: .1, tilt: .2, vary: .22, merge: .18, pool: .3, smooth: .92, end: 'drop', taper: 1.2,
-    color: '#C9452F', gloss: .35, shine: 1, grain: .3, glow: .6, vol: 1, edge: 160, light: 135, shadow: 0, preset: 'Coral',
+    size: 30, pressure: .7, speed: .1, tilt: .2, vary: .22, merge: .18, pool: .8, smooth: .92, end: 'drop', taper: 1.2,
+    color: '#C9452F', gloss: .35, shine: 1, grain: .3, glow: .6, vol: 1, edge: 160, pipe: 1.2, light: 135, shadow: 0, preset: 'Coral',
   },
 };
-const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper']);
+const GEOM = new Set(['size', 'pressure', 'speed', 'tilt', 'vary', 'merge', 'pool', 'smooth', 'end', 'taper', 'pipe']);
 const BRUSHES = ['slip', 'metal', 'stone', 'clay'];
 const TOOLS = ['slip', 'stone', 'clay'];      // brushes offered in the pill; Metal is retired until a better one, but old Metal layers still render
 const NAMES = { slip: 'Slip', metal: 'Metal', stone: 'Stone', clay: 'Clay' };

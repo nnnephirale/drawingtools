@@ -37,6 +37,7 @@ function strokeStamps(st, P, out, W, H, minSig) {
   const base = (erase ? st.size : P.size) * .5;
   const prI = erase ? .5 : P.pressure, spI = erase ? 0 : P.speed, tiI = erase ? 0 : P.tilt;
   const smoothK = st.shape ? 0 : erase ? .15 : P.smooth, poolK = erase ? 0 : P.pool, vary = erase ? 0 : P.vary;
+  const pipe = erase ? 0 : P.pipe || 0;          // clay: a held pen keeps piping material out (see dome() in shaders.js)
   const end = erase ? 'none' : P.end;
   const vref = 1.1 * W / 1600;
   const emit = emitter(out, st.sym, W, H);
@@ -47,7 +48,8 @@ function strokeStamps(st, P, out, W, H, minSig) {
   const a = 1 - smoothK * .86;
   const X = [], Y = [], Rr = [], pools = [];
   let sx = pts[0], sy = pts[1], vs = 0, rs = -1;
-  let ax = pts[0], ay = pts[1], at = pts[3], poolR = 0, poolX = 0, poolY = 0;
+  let ax = pts[0], ay = pts[1], at = pts[3], poolR = 0, poolW = 1, poolX = 0, poolY = 0;
+  const still = Math.max(2, base * (pipe ? .4 : .15));   // piping: the hand's drift keeps feeding one pool, not a row of them
   for (let i = 0; i < n; i++) {
     const o = i * 5, x = pts[o], y = pts[o + 1], p = pts[o + 2], t = pts[o + 3], al = pts[o + 4];
     if (i) {
@@ -62,14 +64,17 @@ function strokeStamps(st, P, out, W, H, minSig) {
     const r = base * pf * sf * tf;
     rs = rs < 0 ? r : rs + (r - rs) * .35;
     if (Math.hypot(x - ax, y - ay) > Math.max(2, base * .15)) {
-      if (poolR) { pools.push(poolX, poolY, poolR); poolR = 0; }
+      if (poolR) { pools.push(poolX, poolY, poolR, poolW); poolR = 0; }
       ax = x; ay = y; at = t;
     } else if (poolK > 0 && t - at > 90) {
-      poolR = rs * (1 + poolK * .9 * (1 - Math.exp(-(t - at - 90) / 650))); poolX = ax; poolY = ay;
+      const g = 1 - Math.exp(-(t - at - 90) / 650), held = Math.min((t - at - 90) / 1000, 8);
+      // piped material keeps coming while the pen is held: the bead swells wider and taller, slowing but not stopping
+      poolR = rs * (1 + poolK * .9 * g + pipe * poolK * .3 * Math.pow(held, .7)); poolX = ax; poolY = ay;
+      poolW = 1 + pipe * poolK * (2.2 * g + .5 * held);
     }
     X.push(sx); Y.push(sy); Rr.push(rs);
   }
-  if (poolR) pools.push(poolX, poolY, poolR);
+  if (poolR) pools.push(poolX, poolY, poolR, poolW);
   if (n > 1 && a < 1) {
     const lx = pts[(n - 1) * 5], ly = pts[(n - 1) * 5 + 1];
     for (let k = 0; k < 40 && Math.hypot(lx - sx, ly - sy) > .3; k++) { sx += (lx - sx) * a; sy += (ly - sy) * a; X.push(sx); Y.push(sy); Rr.push(rs); }
@@ -127,6 +132,6 @@ function strokeStamps(st, P, out, W, H, minSig) {
     dot(DX[0], DY[0], DR[0] * 1.04, .55);
     dot(DX[k - 1], DY[k - 1], DR[k - 1] * 1.06, .6);
   }
-  for (let i = 0; i < pools.length; i += 3) dot(pools[i], pools[i + 1], pools[i + 2], 1);
+  for (let i = 0; i < pools.length; i += 4) dot(pools[i], pools[i + 1], pools[i + 2], pools[i + 3]);
 }
 

@@ -289,7 +289,8 @@ function renderPanel() {
       sec('Finish'),
       ...[['gloss', 'Gloss', 0, 1, .01], ['shine', 'Shine', 0, 2, .01], ['brk', 'Break', 0, 1, .01], ['speckle', 'Speckle', 0, 1, .01], ['grain', 'Grain', 0, 1, .01]].map(ps));
   }
-  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, brush === 'clay' ? 160 : 80, 1]].map(ps), sec('Light'));
+  sp.append(sec('Form'), ...[['vol', 'Volume', .2, 2.5, .01], ['edge', 'Edge', 2, brush === 'clay' ? 160 : 80, 1]].map(ps),
+    ...(brush === 'clay' ? [ps(['pipe', 'Bulge', 0, 2.5, .01])] : []), sec('Light'));
   if (brush === 'clay' || doc.light.shadows) sp.append(hint(`Lit by the board's light, set in <b>Canvas → Light</b>${brush === 'clay' ? '' : ' while shadows are on'}.`));
   else sp.append(...[['light', 'Light', 0, 360, 1, '°'], ['shadow', 'Shadow', 0, 1, .01]].map(ps));
   markPresets();

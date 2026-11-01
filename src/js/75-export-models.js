@@ -151,7 +151,7 @@ async function exportModel(kind) {
 }
 function viewControls() {
   return [sec('3D view'),
-    slider({ label: 'Depth', min: 1, max: 3, step: .05, suf: '×', hist: false, get: () => ui.depth, set: v => { ui.depth = v; request(); save(); } }),
+    slider({ label: 'Depth', min: .3, max: 1.2, step: .05, suf: '×', hist: false, get: () => ui.depth, set: v => { ui.depth = v; request(); save(); } }),
     hint('Turn Canvas off (just above 3D) and each stroke becomes a whole object with an underside, so you can turn it right round. Depth 1× keeps ropes round.'),
     hint(isTouchUI
       ? 'Drag to turn the drawing, all the way round if you like. Pinch to zoom, two fingers to move it. Fit returns to the starting angle.'

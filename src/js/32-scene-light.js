@@ -101,7 +101,7 @@ function sceneEnd(S, layers, li, steps) {
   gl.bindTexture(gl.TEXTURE_2D, null);
   // how far a shadow can fall: the tallest likely stack over the tangent of the light's height
   let hmax = 0;
-  for (const L of layers) { const P = L.params; hmax = Math.max(hmax, Math.min(P.size * .85 * (1 + P.pool * .6), (P.edge ?? 40) * 1.5) * P.vol * (L.brush === 'clay' ? 2 : 1)); }
+  for (const L of layers) { const P = L.params; hmax = Math.max(hmax, Math.min(P.size * .85 * (1 + P.pool * .6), (P.edge ?? 40) * 1.5) * P.vol * (L.brush === 'clay' ? 2 + (P.pipe ?? 0) * .8 : 1)); }
   S.reach = clamp(hmax * 1.4 / Math.tan(li.Lt.height * Math.PI / 180), 24, 900); S.steps = steps;
   fullscreen(PR.light, S.lb, u => { gl.uniform2f(u.uDoc, doc.w, doc.h); marchUniforms(u, S, li, 6); });
 }

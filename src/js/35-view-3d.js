@@ -168,6 +168,7 @@ function render3D(out, scale = 1) {
   gl.uniform3f(u.uCam, ...cam.eye);
   gl.uniformMatrix4fv(u.uMVP, false, cam.mvp);
   gl.uniform1f(u.uDepth, ui.depth);
+  gl.uniform1f(u.uRound, ui.canvas3d ? 0 : 1); gl.uniform1f(u.uCell, doc.w / g.nx);
   gl.bindVertexArray(g.vao);
   for (const pass of [0, 1]) {
     gl.uniform1i(u.uPass, pass);
