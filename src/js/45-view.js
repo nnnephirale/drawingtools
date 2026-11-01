@@ -7,7 +7,7 @@ const zq = s => zoomBar.querySelector(`[data-z="${s}"]`);
 let cssW = 0, cssH = 0;
 const pctOf = z => cssW ? cssW * z / doc.w * 100 : 100;
 const zOfPct = p => p / 100 * doc.w / Math.max(1, cssW);
-const atFit = () => Math.abs(view.z - 1) < .001;
+const atFit = () => Math.abs(view.z - 1) < .001 && Math.abs(view.x) < .5 && Math.abs(view.y) < .5;
 function fit() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
   if (!sw || !sh) return;
@@ -17,11 +17,15 @@ function fit() {
   applyView(); scheduleRes();
   if (three.on) size3D();
 }
+/* The board moves freely at any zoom, like paper on a desk, until only a strip of it is left on screen. It
+   used to snap back to the centre at fit and below, and to a tight margin when zoomed in, so every pan and
+   pinch fought the clamp (read as recentring and twitching on the iPad). Fit brings it back. */
+const KEEP = 96;     // px of the board that always stays on screen
 function clampView() {
-  if (view.z <= 1) { view.x = 0; view.y = 0; return; }
   const c = Math.abs(Math.cos(view.r)), sn = Math.abs(Math.sin(view.r));
   const bw = cssW * c + cssH * sn, bh = cssW * sn + cssH * c;      // the turned board's footprint
-  const mx = (bw * view.z - cssW) / 2 + cssW * .25, my = (bh * view.z - cssH) / 2 + cssH * .25;
+  const sw = stage.clientWidth || cssW, sh = stage.clientHeight || cssH;
+  const mx = Math.max(0, (bw * view.z + sw) / 2 - KEEP), my = Math.max(0, (bh * view.z + sh) / 2 - KEEP);
   view.x = clamp(view.x, -mx, mx); view.y = clamp(view.y, -my, my);
 }
 function applyView() {

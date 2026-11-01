@@ -143,3 +143,21 @@ paper, both textured, with real dimension: "not pressed by a flat surface or pla
   board's light and are darkened where the scene blocks it; their old per-layer Shadow slider steps aside.
 - Not yet: the 3D view gets the occlusion but not cast shadows (its light turns with the room), and its slab
   shows plain paper. Black velvet held off on purpose.
+
+## Round 13: iPad fixes (1 Nov 2026)
+From her iPad photo and notes:
+- **Folded paper lit in one quarter only, flat shadow elsewhere.** `tanh` of a large argument is computed as
+  exp(2x)/exp(2x) on Apple GPUs and overflows to NaN, so every quarter where the fold offset was positive
+  went dark. The argument is clamped first. Chromium on the Mac never showed it.
+- **Holes in wedge shapes.** A wedge's ends are hair-thin stamps; where they sat inside a pooled blob, the
+  blob's radius (a density-weighted average, G/R) was dragged down by the many thin stamps, and its height dipped
+  into a pair of pits. The field now also holds density × radius² (B), and the radius is B/G, weighted towards the
+  fat stamps. Elsewhere it reads as before.
+- **"Constantly recentres, extremely twitchy."** At fit and below the board snapped to the centre on every
+  move, and zoomed in it had a tight margin, so pans and pinches fought the clamp. It now moves freely at any
+  zoom until only 96 px of it is left on screen. Her call: "a snap bias for recentring, but I don't need the
+  canvas constantly recentred": letting go within 28 px and 7% of fit settles onto it, like the quarter-turn snap.
+- **A palm flipped the board upside down.** Before the Pencil had touched the screen, a palm counted as fingers;
+  its contact points sit close together and can trade places, which reads as a 180° twist. Broad contacts (over
+  90 px) are now ignored from the start; a twist is read only from exactly two fingers at least 110 px apart, and a
+  jump of more than ~25° between two events is dropped. Contacts closer than 60 px don't pinch either.

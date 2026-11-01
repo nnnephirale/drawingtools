@@ -33,14 +33,16 @@ void main(){
   float d2 = dot(vD, vD);
   float k = exp(-.5*d2) * (1. - smoothstep(6.76, 10.24, d2));
   float f = vW * k * uScale;
-  o = vec4(f, f * vR / 64., 0., 0.);
+  // radius weighted by radius (b / g): where a wedge's hair-thin end lies inside a fat blob, a plain average
+  // would let the many thin stamps drag the blob's radius, and its height, down into a pit
+  o = vec4(f, f * vR / 64., f * vR * vR / 4096., 0.);
 }`;
 const FS_COPY = `#version 300 es
 precision highp float; in vec2 vUv; uniform sampler2D uSrc; out vec4 o;
 void main(){ o = texture(uSrc, vUv); }`;
 const FS_ERASE = `#version 300 es
 precision highp float; in vec2 vUv; uniform sampler2D uSrc, uE; uniform float uInv; out vec4 o;
-void main(){ vec4 f = texture(uSrc, vUv); float e = texture(uE, vUv).r * uInv; o = vec4(f.rg * clamp(1. - e, 0., 1.), 0., 0.); }`;
+void main(){ vec4 f = texture(uSrc, vUv); float e = texture(uE, vUv).r * uInv; o = vec4(f.rgb * clamp(1. - e, 0., 1.), 0.); }`;
 /* Scene light. Everything on the board shares one key light and one sky. Three small buffers (half the field's
    resolution, in the board's uv) carry what a single layer can't know on its own:
    - heights: every visible layer's height summed (doc px), mipmapped, so blurred heights are one fetch away;
@@ -72,8 +74,9 @@ vec3 paper(vec2 p, vec2 docSz, int kind, float seed){
     // folded in four and opened out: a valley down the middle, a ridge across it, every panel tilted a little
     vec2 c = docSz * .5 + vec2(pnoise(vec2(p.y / 90., seed)) - .5, pnoise(vec2(p.x / 90., seed + 4.)) - .5) * 5.;
     vec2 d = p - c;
-    g.x += -.045 * tanh(d.x / 2.2) * (1. - .25 * smoothstep(0., docSz.y * .5, abs(d.y)));
-    g.y += .03 * tanh(d.y / 2.2) * (1. - .25 * smoothstep(0., docSz.x * .5, abs(d.x)));
+    // tanh of a large number overflows to NaN on Apple GPUs (exp(2x) / exp(2x)): clamp it first
+    g.x += -.045 * tanh(clamp(d.x / 2.2, -8., 8.)) * (1. - .25 * smoothstep(0., docSz.y * .5, abs(d.y)));
+    g.y += .03 * tanh(clamp(d.y / 2.2, -8., 8.)) * (1. - .25 * smoothstep(0., docSz.x * .5, abs(d.x)));
     float crush = exp(-d.x * d.x / 3.) + .8 * exp(-d.y * d.y / 3.);
     tone *= 1. - .06 * crush * (.6 + .8 * pnoise(p / 3. + s));
   }
@@ -174,7 +177,8 @@ void main(){
   o = vec4(pow(max(col, 0.), vec3(1. / 2.2)), 1.);
 }`;
 
-/* The material shader. The field texture holds R = summed gaussian density, G = density-weighted radius.
+/* The material shader. The field texture holds R = summed gaussian density, G = density × radius, B = density × radius²
+   (the local radius is B / G, so thin stamps can't drag a fat one's radius down).
    Surface = where R > 1. From R we recover the distance to the silhouette, then build the height as a
    quarter-circle bevel of radius Edge: thin lines come out round, wide pools and merges go flat on top,
    like a liquid held by surface tension (the reference brushes' puddles).
@@ -184,14 +188,15 @@ precision highp sampler2D;
 uniform sampler2D uField;
 uniform float uInv, uA, uBevel, uBulge;
 uniform vec2 uDoc;
-vec2 F(vec2 uv){ return texture(uField, uv).rg * uInv; }
+// x = summed density R, y = the local radius (doc px)
+vec2 F(vec2 uv){ vec4 t = texture(uField, uv); return vec2(t.r * uInv, t.b / max(t.g, 1e-7) * 64.); }
 float lnA;
 // 0 at the silhouette, 1 on the ridge of a lone line (exact for a straight gaussian ridge)
 float innerE(float R){ return R >= uA ? 1. : 1. - sqrt(max(log(uA / R) / lnA, 0.)); }
 float H(vec2 uv){
   vec2 f = F(uv);
   if (f.x <= 1.) return 0.;
-  float rad = f.y / f.x * 64.;
+  float rad = f.y;
   float over = max(f.x / uA - 1., 0.);
   float B = max(min(rad, uBevel), .5);
   float d = innerE(f.x) * rad + over * rad * .6;
@@ -207,7 +212,7 @@ float edgeT(vec2 uv){ vec2 d = min(uv, 1. - uv) * uDoc; return clamp(min(d.x, d.
 float Hg(vec2 uv){
   vec2 f = F(uv);
   if (f.x <= .02) return -2. * uBevel;
-  float rad = f.y / f.x * 64.;
+  float rad = f.y;
   float over = max(f.x / uA - 1., 0.);
   float B = max(min(rad, uBevel), .5);
   float t = clamp((innerE(f.x) * rad + over * rad * .6) / B, -1., 1.);
@@ -235,7 +240,7 @@ void main(){
   // a rolled snake of clay is a whole cylinder lying on the board: what we see is its upper half, standing on a
   // lower half that's tucked out of sight. uLift adds that hidden half (one radius) so it casts like one.
   if (uMode == 0) { vec2 f = F(vUv); float on = step(1., f.x);         // a clean step: a texel is ground or stroke, never between
-    float top = (H(vUv) + uLift * f.y / max(f.x, 1e-4) * 64.) * uK + dot(texture(uBase, vUv), uBaseCh);
+    float top = (H(vUv) + uLift * f.y) * uK + dot(texture(uBase, vUv), uBaseCh);
     o = vec4(top * on, 0., 0., on); return; }
   float a = clamp((F(vUv).x - 1.) * 3. + .5, 0., 1.);
   o = vec4(uCol * a, a);
@@ -568,7 +573,7 @@ void main(){
     vec3 N = N0;
     vec3 L = uL, V = ${mesh ? 'OW(normalize(uCam - vP))' : 'vec3(0., 0., 1.)'};
     vec2 Lxy = normalize(L.xy + vec2(1e-5));
-    float rad = c.y / max(c.x, 1e-4) * 64.;
+    float rad = c.y;
     float e0 = innerE(max(R, 1.0001));
     float wob = fbm(tx / 120. + uSeed) - .5;
     // fine photographic grain: two octaves of ~1 doc-px noise

@@ -223,19 +223,28 @@ const spread = ps => ps.length < 2 ? 1 : Math.hypot(ps[0].x - ps[1].x, ps[0].y -
 const twist = ps => Math.atan2(ps[1].y - ps[0].y, ps[1].x - ps[0].x);
 function startGesture() {
   const ps = [...touches.values()];
-  gesture = { n: ps.length, z0: view.z, x0: view.x, y0: view.y, r0: view.r, a0: ps.length >= 2 ? twist(ps) : 0,
+  const a = ps.length >= 2 ? twist(ps) : 0;
+  gesture = { n: ps.length, z0: view.z, x0: view.x, y0: view.y, r0: view.r, a0: a, last: a,
     turning: gesture ? gesture.turning : false, c0: centroid(ps), d0: spread(ps), C: untransformedCentre() };
 }
+const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
+const PINCH_MIN = 60, TWIST_MIN = 110, TWIST_JUMP = .45;
 function updateGesture() {
   const ps = [...touches.values()];
   if (ps.length !== gesture.n) { startGesture(); return; }
   const g = gesture, c = centroid(ps);
-  const z = g.n >= 2 ? clamp(g.z0 * spread(ps) / Math.max(g.d0, 1), Math.min(1, zOfPct(5)), zOfPct(3200)) : g.z0;
+  // contacts closer than a pinch can't be read as one (a palm's points): they neither zoom nor turn
+  const z = g.n >= 2 ? clamp(g.z0 * Math.max(spread(ps), PINCH_MIN) / Math.max(g.d0, PINCH_MIN), Math.min(1, zOfPct(5)), zOfPct(3200)) : g.z0;
   let r = g.r0;
-  if (g.n >= 2) {
-    const da = Math.atan2(Math.sin(twist(ps) - g.a0), Math.cos(twist(ps) - g.a0));
+  if (g.n === 2) {
+    // a twist is read only from two fingers well apart, moving smoothly. Close contacts, or a jump of more than
+    // ~25° between two events (contacts trading places), would spin the board: those changes are dropped
+    const tw = twist(ps), step = wrapA(tw - g.last);
+    g.last = tw;
+    if (spread(ps) < TWIST_MIN || Math.abs(step) > TWIST_JUMP) g.a0 += step;
+    const da = wrapA(tw - g.a0);
     if (!g.turning && Math.abs(da) > TURN_WAKE) { g.turning = true; g.a0 += Math.sign(da) * TURN_WAKE; }   // no jump as it wakes
-    if (g.turning) r = snapTurn(g.r0 + Math.atan2(Math.sin(twist(ps) - g.a0), Math.cos(twist(ps) - g.a0)));
+    if (g.turning) r = snapTurn(g.r0 + wrapA(tw - g.a0));
   }
   // keep the board point that was under the fingers' centre under it, through the zoom and the turn
   const dx = g.c0[0] - g.C[0] - g.x0, dy = g.c0[1] - g.C[1] - g.y0, k = z / g.z0, t = r - g.r0, co = Math.cos(t), sn = Math.sin(t);
@@ -245,6 +254,12 @@ function updateGesture() {
 }
 // letting go near upright or a quarter turn settles onto it
 function endTurn() { const n = nearestTurn(view.r); if (n !== view.r && Math.abs(view.r - n) < TURN_SNAP * 1.6) eased(() => { view.r = n; applyView(); }); }
+// letting go close to the fitted, centred board settles onto it; anywhere else it stays where it was put
+const HOME_PX = 28, HOME_Z = .07;
+function endMove() {
+  if (atFit() || Math.abs(view.z - 1) > HOME_Z || Math.hypot(view.x, view.y) > HOME_PX) return;
+  eased(() => { view.z = 1; view.x = 0; view.y = 0; applyView(); });
+}
 
 stage.addEventListener('pointerdown', e => {
   if (three.on) { orbitDown(e); return; }
@@ -255,7 +270,7 @@ stage.addEventListener('pointerdown', e => {
     if (drawing && !drawing.touch) return;                         // palm on glass while the Pencil draws
     // broad contact = palm, not a finger. Safari on iPad reports a fingertip at ~40–60px, a palm well past 90
     lastTouch = Math.round(Math.max(e.width || 0, e.height || 0)); updateStat();
-    if (penSeen && lastTouch > PALM) return;
+    if (lastTouch > PALM) return;                                 // a palm, Pencil seen yet or not
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
     tapDown(e, touches.size);
     if (touches.size >= 2 || penSeen) {
@@ -297,10 +312,10 @@ function pointerEnd(e) {
   if (orbit.ptrs.has(e.pointerId)) { orbitUp(e); return; }
   if (e.pointerType === 'touch') {
     touches.delete(e.pointerId);
-    if (touches.size === 0) { tapEnd(e); if (gesture && gesture.turning) endTurn(); gesture = null; }
+    if (touches.size === 0) { tapEnd(e); if (gesture) { if (gesture.turning) endTurn(); endMove(); } gesture = null; }
     else if (gesture) startGesture();
   }
-  if (panDrag && panDrag.id === e.pointerId) { panDrag = null; board.classList.remove('grab'); }
+  if (panDrag && panDrag.id === e.pointerId) { panDrag = null; board.classList.remove('grab'); endMove(); }
   if (drawing && drawing.id === e.pointerId) { if (e.type === 'pointercancel') cancelStroke(); else endStroke(); }
   if ((lasso && lasso.id === e.pointerId) || (selDrag && selDrag.id === e.pointerId)) selUp(e);
 }
